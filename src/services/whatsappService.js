@@ -27,6 +27,7 @@ async function initWhatsApp() {
         autoClose: 0, // Never auto-close (0 = disabled)
         headless: true,
         useChrome: true, // Use system Google Chrome installation
+        browserArgs: ['--no-sandbox', '--disable-setuid-sandbox'], // Fix for running as root on VPS
         logQR: true, // Print QR code in terminal
         updatesLog: false,
         catchQR: (base64Qr, asciiQR) => {
