@@ -1,0 +1,24 @@
+{
+  "name": "vet-receptionist",
+  "version": "1.0.0",
+  "description": "AI Voice Receptionist for Glasslyn Vets - Out-of-hours veterinary call handling",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@wppconnect-team/wppconnect": "^1.31.0",
+    "retell-sdk": "^4.0.0",
+    "express": "^4.21.0",
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "winston": "^3.17.0",
+    "uuid": "^11.0.0",
+    "axios": "^1.7.0"
+  },
+  "engines": {
+    "node": ">=18.10.0"
+  },
+  "license": "PRIVATE"
+}
