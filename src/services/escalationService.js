@@ -172,10 +172,21 @@ async function handleVetResponse(vetPhone, response) {
   const cleanedPhone = normalisePhone(vetPhone);
 
   // Find the active case assigned to this vet
-  const activeCase = db.findActiveCaseForVet(cleanedPhone);
+  let activeCase = db.findActiveCaseForVet(cleanedPhone);
+
   if (!activeCase) {
-    logger.warn(`Received vet response but no active case found for phone: ${cleanedPhone}`);
-    return null;
+    // FALLBACK: If WPPConnect obscures the vet's phone behind a Linked Device ID (@lid) 
+    // and we couldn't resolve it, check if there is exactly ONE escalating case in the system.
+    // If so, we safely assume they are the vet responding to it.
+    const escalatingCases = db.getActiveCases().filter(c => c.status === 'escalating');
+
+    if (escalatingCases.length === 1) {
+      activeCase = escalatingCases[0];
+      logger.info(`Fallback: Matched unidentified vet response to exact single escalating case`, { caseId: activeCase.id });
+    } else {
+      logger.warn(`Received vet response but no active case found for phone: ${cleanedPhone}. (Escalating cases count: ${escalatingCases.length})`);
+      return null;
+    }
   }
 
   const caseId = activeCase.id;
