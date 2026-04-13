@@ -111,13 +111,14 @@ async function startServer() {
     // Register incoming message handler
     whatsappService.onMessage(async (message) => {
       try {
-        const from = message.from || '';
+        // Try to get real phone number from author/sender.id instead of just from (can be @lid)
+        const from = message.author || message.sender?.id || message.from || '';
         const body = message.body || '';
         const senderName = message.sender?.pushname || message.sender?.name || 'Unknown';
 
         // Process via the WhatsApp webhook handler (internal HTTP call)
         // This keeps the logic in the route handler for consistency
-        const phone = normalisePhone(from.replace('@c.us', ''));
+        const phone = normalisePhone(from.replace(/@c\.us|@lid/g, ''));
 
         logger.info(`Incoming WhatsApp message`, {
           from: phone,
