@@ -111,14 +111,29 @@ async function startServer() {
     // Register incoming message handler
     whatsappService.onMessage(async (message) => {
       try {
-        // Try to get real phone number from author/sender.id instead of just from (can be @lid)
-        const from = message.author || message.sender?.id || message.from || '';
+        let fromIdentifier = message.author || message.sender?.id || message.from || '';
         const body = message.body || '';
         const senderName = message.sender?.pushname || message.sender?.name || 'Unknown';
 
+        // Fix WPPConnect Linked Device ID bug
+        // WhatsApp obscures real phone numbers using @lid. We must resolve it.
+        if (fromIdentifier.includes('@lid')) {
+          const wppClient = whatsappService.getClient();
+          if (wppClient) {
+            try {
+              const lidEntry = await wppClient.getPnLidEntry(message.from || fromIdentifier);
+              if (lidEntry && lidEntry.pn) {
+                fromIdentifier = lidEntry.pn; // Real phone mapping found
+              }
+            } catch (err) {
+              logger.warn('Failed to resolve LID to phone number', { error: err.message });
+            }
+          }
+        }
+
         // Process via the WhatsApp webhook handler (internal HTTP call)
         // This keeps the logic in the route handler for consistency
-        const phone = normalisePhone(from.replace(/@c\.us|@lid/g, ''));
+        const phone = normalisePhone(fromIdentifier.replace(/@c\.us|@lid/g, ''));
 
         logger.info(`Incoming WhatsApp message`, {
           from: phone,
