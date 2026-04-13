@@ -118,6 +118,30 @@ function handleCallAnalyzed(call) {
     callId: call.call_id,
     analysis: call.call_analysis,
   });
+});
 }
+
+/**
+ * POST /inbound
+ * Receives the initial inbound webhook from Retell BEFORE a call connects.
+ * Used to extract the caller's phone number and inject it into the LLM context.
+ */
+router.post('/inbound', (req, res) => {
+  try {
+    const { from_number, to_number, call_id } = req.body;
+
+    logger.info(`Retell inbound webhook received`, { from_number, to_number, call_id });
+
+    // Inject the from_number as a dynamic variable into the LLM context
+    return res.status(200).json({
+      dynamic_variables: {
+        caller_phone: from_number || "Unknown"
+      }
+    });
+  } catch (err) {
+    logger.error('Error processing Retell inbound webhook', { error: err.message });
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 module.exports = router;
