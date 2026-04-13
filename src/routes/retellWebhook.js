@@ -118,7 +118,6 @@ function handleCallAnalyzed(call) {
     callId: call.call_id,
     analysis: call.call_analysis,
   });
-});
 }
 
 /**
