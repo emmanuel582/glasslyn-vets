@@ -176,15 +176,19 @@ async function handleVetResponse(vetPhone, response) {
 
   if (!activeCase) {
     // FALLBACK: If WPPConnect obscures the vet's phone behind a Linked Device ID (@lid) 
-    // and we couldn't resolve it, check if there is exactly ONE escalating case in the system.
-    // If so, we safely assume they are the vet responding to it.
+    // and we couldn't resolve it, check if there are escalating cases.
+    // If so, we safely assume they are the vet responding to the most recent one.
     const escalatingCases = db.getActiveCases().filter(c => c.status === 'escalating');
 
-    if (escalatingCases.length === 1) {
+    if (escalatingCases.length > 0) {
+      // getActiveCases() returns cases ordered by created_at DESC, so index 0 is the newest
       activeCase = escalatingCases[0];
-      logger.info(`Fallback: Matched unidentified vet response to exact single escalating case`, { caseId: activeCase.id });
+      logger.info(`Fallback: Matched unidentified vet response to the most recent escalating case`, {
+        caseId: activeCase.id,
+        totalEscalating: escalatingCases.length
+      });
     } else {
-      logger.warn(`Received vet response but no active case found for phone: ${cleanedPhone}. (Escalating cases count: ${escalatingCases.length})`);
+      logger.warn(`Received vet response but no active case found for phone: ${cleanedPhone}. (No escalating cases found)`);
       return null;
     }
   }
