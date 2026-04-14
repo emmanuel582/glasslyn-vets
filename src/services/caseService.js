@@ -10,12 +10,13 @@ const db = require('../database');
 /**
  * Create a new case from collected call data.
  */
-function openCase({ callerPhone, callerName, eircode, issueDescription, urgency, retellCallId }) {
+function openCase({ callerPhone, callerWhatsapp, callerName, eircode, issueDescription, urgency, retellCallId }) {
   const caseId = generateCaseId();
 
   const newCase = db.createCase({
     id: caseId,
     caller_phone: callerPhone,
+    caller_whatsapp: callerWhatsapp || null,
     caller_name: callerName || null,
     eircode: eircode || null,
     issue_description: issueDescription || null,

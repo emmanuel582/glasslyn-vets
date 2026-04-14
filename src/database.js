@@ -40,6 +40,7 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS cases (
       id TEXT PRIMARY KEY,
       caller_phone TEXT NOT NULL,
+      caller_whatsapp TEXT,
       caller_name TEXT,
       eircode TEXT,
       issue_description TEXT,
@@ -75,6 +76,19 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_cases_caller_phone ON cases(caller_phone);
     CREATE INDEX IF NOT EXISTS idx_audit_case_id ON audit_log(case_id);
   `);
+
+  // ─── Migrations ─────────────────────────────────────
+  // Add caller_whatsapp column if it doesn't exist (for existing databases)
+  try {
+    const columns = db.prepare("PRAGMA table_info(cases)").all();
+    const hasWhatsappCol = columns.some(c => c.name === 'caller_whatsapp');
+    if (!hasWhatsappCol) {
+      db.exec("ALTER TABLE cases ADD COLUMN caller_whatsapp TEXT");
+      logger.info('Migration: Added caller_whatsapp column to cases table');
+    }
+  } catch (migrationErr) {
+    logger.warn('Migration check for caller_whatsapp failed (may already exist)', { error: migrationErr.message });
+  }
 
   logger.info('Database initialised', { path: DB_PATH });
 
@@ -145,12 +159,13 @@ function upsertCaller(phone, name, eircode) {
  */
 function createCase(caseData) {
   const stmt = getDb().prepare(`
-    INSERT INTO cases (id, caller_phone, caller_name, eircode, issue_description, urgency, status, retell_call_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO cases (id, caller_phone, caller_whatsapp, caller_name, eircode, issue_description, urgency, status, retell_call_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   stmt.run(
     caseData.id,
     caseData.caller_phone,
+    caseData.caller_whatsapp || null,
     caseData.caller_name || null,
     caseData.eircode || null,
     caseData.issue_description || null,
@@ -173,7 +188,7 @@ function getCaseById(caseId) {
  */
 function updateCase(caseId, updates) {
   const allowedFields = [
-    'caller_name', 'caller_phone', 'eircode', 'issue_description',
+    'caller_name', 'caller_phone', 'caller_whatsapp', 'eircode', 'issue_description',
     'urgency', 'status', 'assigned_vet_name', 'assigned_vet_phone',
     'vet_response', 'vet_eta', 'escalation_level', 'retell_call_id'
   ];

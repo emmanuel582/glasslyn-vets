@@ -206,9 +206,10 @@ async function handleVetResponse(vetPhone, response) {
 
     // Notify caller
     const updatedCase = caseService.getCase(caseId);
+    const callerWhatsapp = updatedCase.caller_whatsapp || updatedCase.caller_phone;
     try {
-      await whatsappService.notifyCallerAccepted(updatedCase.caller_phone, updatedCase, 'within_1_hour');
-      db.addAuditLog(caseId, 'caller_notified', { eta: 'within_1_hour' });
+      await whatsappService.notifyCallerAccepted(callerWhatsapp, updatedCase, 'within_1_hour');
+      db.addAuditLog(caseId, 'caller_notified', { eta: 'within_1_hour', sentTo: callerWhatsapp });
     } catch (err) {
       logger.error(`Failed to notify caller`, { caseId, error: err.message });
     }
@@ -223,9 +224,10 @@ async function handleVetResponse(vetPhone, response) {
 
     // Notify caller
     const updatedCase = caseService.getCase(caseId);
+    const callerWhatsapp = updatedCase.caller_whatsapp || updatedCase.caller_phone;
     try {
-      await whatsappService.notifyCallerAccepted(updatedCase.caller_phone, updatedCase, 'over_1_hour');
-      db.addAuditLog(caseId, 'caller_notified', { eta: 'over_1_hour' });
+      await whatsappService.notifyCallerAccepted(callerWhatsapp, updatedCase, 'over_1_hour');
+      db.addAuditLog(caseId, 'caller_notified', { eta: 'over_1_hour', sentTo: callerWhatsapp });
     } catch (err) {
       logger.error(`Failed to notify caller`, { caseId, error: err.message });
     }
@@ -255,6 +257,7 @@ async function handleVetResponse(vetPhone, response) {
         `*1* → Accept (within 1 hour)\n` +
         `*2* → Accept (over 1 hour)\n` +
         `*3* → Reject`
+
       );
     } catch (err) {
       logger.error(`Failed to send help message to vet`, { error: err.message });

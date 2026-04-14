@@ -114,12 +114,15 @@ async function sendMessage(phone, message) {
 async function sendCaseToVet(vetPhone, caseData) {
   const clinicName = config.clinic.name;
 
+  // Use the WhatsApp number if available, otherwise fall back to caller_phone
+  const callerContactPhone = caseData.caller_whatsapp || caseData.caller_phone;
+
   const message =
     `🚨 *URGENT VET CASE — ${clinicName}*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
     `📋 *Case ID:* ${caseData.id}\n` +
     `👤 *Caller:* ${caseData.caller_name || 'Unknown'}\n` +
-    `📞 *Phone:* ${caseData.caller_phone}\n` +
+    `📞 *Phone:* ${callerContactPhone}\n` +
     `📍 *Eircode:* ${caseData.eircode || 'Not provided'}\n\n` +
     `🐾 *Issue:*\n${caseData.issue_description || 'No description provided'}\n\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +

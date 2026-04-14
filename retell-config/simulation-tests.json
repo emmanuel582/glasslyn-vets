@@ -1,43 +1,13 @@
 [
   {
-    "name": "Urgent Emergency - Hit by Car",
-    "user_prompt": "## Identity\nYour name is Sarah O'Connor. Your phone number is 085 123 4567. Your Eircode is D02 XY45.\n\n## Goal\nYou are calling Glasslyn Vets because your dog, Buddy, has just been hit by a car. He is breathing but bleeding from his leg. You are very distressed and panicked. You need a vet immediately.\n\n## Behavior\n- Speak quickly and sound panicked.\n- Keep your first response short, e.g., \"Help, my dog just got hit by a car!\"\n- If the assistant asks for your details, provide them but urge the assistant to hurry.\n- Confirm the details when the assistant reads them back.",
+    "name": "End-to-End Urgent Emergency",
+    "user_prompt": "## Identity\nYour name is Sarah O'Connor. Your phone number is +2348070709242. Your Eircode is D02 XY45.\n\n## Goal\nYou are calling Glasslyn Vets because your dog, Buddy, has just been hit by a car. He is bleeding from his leg. You are panicking and need a vet immediately.\n\n## Behavior\n- Speak quickly and sound panicked.\n- Keep your first response short, e.g., \"Help, my dog just got hit by a car!\"\n- When the assistant explicitly asks if your number is a WhatsApp number, confirm YES.\n- If the assistant asks for your details, provide them but urge the assistant to hurry.\n- Confirm the details when the assistant reads them back.",
     "metrics": [
+      "Assistant verified that the caller's number is a valid WhatsApp number.",
       "Assistant successfully collected name, phone, eircode, and issue description.",
-      "Assistant maintained a calm, empathetic, and professional tone despite the caller's panic.",
       "Assistant correctly identified the situation as an urgent emergency.",
-      "Assistant assured the caller the on-call vet would be contacted.",
-      "Assistant did NOT try to give medical advice."
-    ]
-  },
-  {
-    "name": "Non-Urgent - Routine Vaccination",
-    "user_prompt": "## Identity\nYour name is Michael Murphy. Your phone number is 087 987 6543. Your Eircode is T12 AB34.\n\n## Goal\nYou are calling to book a routine booster vaccination for your cat, Luna.\n\n## Behavior\n- You are perfectly calm.\n- You tell the assistant you just wanted to check if you could bring Luna in for her shots sometime this week.\n- When the assistant explains the clinic is closed and asks if you want to log it for follow-up, agree to have them call you back tomorrow.",
-    "metrics": [
-      "Assistant correctly identified the situation as non-urgent.",
-      "Assistant explained the clinic is closed and offered to log the case for normal business hours.",
-      "Assistant successfully collected all caller details and read them back.",
-      "Assistant logged the case for future follow-up."
-    ]
-  },
-  {
-    "name": "Urgent - Suspected Poisoning",
-    "user_prompt": "## Identity\nYour name is Emma Kelly. Your phone number is 086 456 7890. You don't know your Eircode, but you live near the main square in town.\n\n## Goal\nYou are calling because your puppy just ate a massive block of dark chocolate you left on the counter. You know chocolate is toxic to dogs and you are worried.\n\n## Behavior\n- You are worried but trying to hold it together.\n- If asked for an Eircode, say you don't know it but give your general address (near the main square).\n- Ask the assistant if they think the puppy will be okay or what you should do right now.",
-    "metrics": [
-      "Assistant declined to give medical advice or a diagnosis while remaining supportive.",
-      "Assistant successfully recorded the address area even without an Eircode.",
-      "Assistant correctly identified chocolate ingestion as a potential urgent case.",
-      "Assistant triggered the escalation process to contact the vet."
-    ]
-  },
-  {
-    "name": "Uncooperative/Rambling Caller",
-    "user_prompt": "## Identity\nYour name is John. You won't give your last name initially. Your number is 083 111 2222.\n\n## Goal\nYou are calling because your older dog is limping a bit today.\n\n## Behavior\n- You ramble a lot about the dog's history (he's 12, his name is Buster, he used to be a farm dog, etc.).\n- You are reluctant to give your full name or address at first, asking \"Why do you need that, can't I just talk to a vet?\"\n- You eventually yield and give your details (John Hayes, P43 CD12) if the assistant kindly but firmly insists.",
-    "metrics": [
-      "Assistant remained polite and patient, without cutting off the caller too aggressively.",
-      "Assistant successfully explained WHY the details are needed.",
-      "Assistant successfully collected the name, phone, Eircode, and issue before proceeding.",
-      "Assistant categorized the limp as non-urgent unless told otherwise."
+      "Assistant assured the caller the on-call vet would be contacted and they would receive a WhatsApp update.",
+      "Assistant successfully triggered the escalation function."
     ]
   }
 ]

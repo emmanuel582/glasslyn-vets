@@ -119,18 +119,29 @@ function handleLookupCaller(args, callId) {
 
 /**
  * save_case_details — Save collected caller info and issue.
- * Args: { name, phone, eircode, issue_description }
+ * Args: { name, phone, whatsapp_number, eircode, issue_description }
  * Returns: { case_id, status }
  */
 function handleSaveCaseDetails(args, callId) {
-  const { name, phone, eircode, issue_description } = args;
+  const { name, phone, whatsapp_number, eircode, issue_description } = args;
 
   if (!phone) {
     return { error: 'Phone number is required to save a case.' };
   }
 
+  // If the caller provided a separate WhatsApp number, use it.
+  // Otherwise, their calling phone IS their WhatsApp number.
+  const whatsappPhone = whatsapp_number ? normalisePhone(whatsapp_number) : normalisePhone(phone);
+
+  logger.info('Saving case details', {
+    callerPhone: normalisePhone(phone),
+    whatsappPhone,
+    whatsappProvided: !!whatsapp_number,
+  });
+
   const newCase = caseService.openCase({
     callerPhone: normalisePhone(phone),
+    callerWhatsapp: whatsappPhone,
     callerName: name || null,
     eircode: eircode || null,
     issueDescription: issue_description || null,
@@ -220,11 +231,12 @@ async function handleLogNonUrgentCase(args, callId) {
   // Mark case as logged
   caseService.logForFollowUp(case_id);
 
-  // Send WhatsApp confirmation to caller
+  // Send WhatsApp confirmation to caller (use WhatsApp number if available)
   try {
     const updatedCase = caseService.getCase(case_id);
-    if (updatedCase.caller_phone) {
-      await whatsappService.notifyCallerLogged(updatedCase.caller_phone, updatedCase);
+    const callerWhatsapp = updatedCase.caller_whatsapp || updatedCase.caller_phone;
+    if (callerWhatsapp) {
+      await whatsappService.notifyCallerLogged(callerWhatsapp, updatedCase);
     }
   } catch (err) {
     logger.warn(`Failed to send non-urgent WhatsApp to caller`, { error: err.message });
