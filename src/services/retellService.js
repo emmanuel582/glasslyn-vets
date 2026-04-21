@@ -39,17 +39,26 @@ function getRetellClient() {
  * @param {string} vetPhone - Vet phone number
  * @param {string} vetName - Vet name for personalisation
  * @param {string} caseId - Case ID for context
+ * @param {string} clinicName - Name of the clinic for the notification script
+ * @param {string} clinicDID - Optional. If provided, used as fromNumber for caller ID
  * @returns {Object} The call response from Retell
  */
-async function callVetNotification(vetPhone, vetName, caseId) {
+async function callVetNotification(vetPhone, vetName, caseId, clinicName, clinicDID) {
   const client = getRetellClient();
-  const fromNumber = toE164(config.retell.fromNumber);
+  
+  // Use clinic's DID if multiple numbers imported, otherwise fallback to default
+  const fromNumberConfig = clinicDID || config.retell.fromNumber;
+  const fromNumber = toE164(fromNumberConfig);
+  
   const toNumber = toE164(vetPhone);
+  const resolvedClinicName = clinicName || 'Glasslyn Vets';
 
   logger.info(`Making outbound notification call to vet`, {
     vetName,
     vetPhone: toNumber,
     caseId,
+    clinicName: resolvedClinicName,
+    fromNumber
   });
 
   try {
@@ -60,6 +69,7 @@ async function callVetNotification(vetPhone, vetName, caseId) {
       retell_llm_dynamic_variables: {
         vet_name: vetName,
         case_id: caseId,
+        clinic_name: resolvedClinicName,
       },
     });
 

@@ -13,6 +13,7 @@ const triageService = require('../services/triageService');
 const escalationService = require('../services/escalationService');
 const whatsappService = require('../services/whatsappService');
 const { normalisePhone } = require('../utils/helpers');
+const db = require('../database');
 
 /**
  * POST /retell/functions
@@ -119,11 +120,11 @@ function handleLookupCaller(args, callId) {
 
 /**
  * save_case_details — Save collected caller info and issue.
- * Args: { name, phone, whatsapp_number, eircode, issue_description }
+ * Args: { name, phone, whatsapp_number, eircode, issue_description, clinic_id }
  * Returns: { case_id, status }
  */
 function handleSaveCaseDetails(args, callId) {
-  const { name, phone, whatsapp_number, eircode, issue_description } = args;
+  const { name, phone, whatsapp_number, eircode, issue_description, clinic_id } = args;
 
   if (!phone) {
     return { error: 'Phone number is required to save a case.' };
@@ -132,11 +133,13 @@ function handleSaveCaseDetails(args, callId) {
   // If the caller provided a separate WhatsApp number, use it.
   // Otherwise, their calling phone IS their WhatsApp number.
   const whatsappPhone = whatsapp_number ? normalisePhone(whatsapp_number) : normalisePhone(phone);
+  const parsedClinicId = parseInt(clinic_id, 10);
 
   logger.info('Saving case details', {
     callerPhone: normalisePhone(phone),
     whatsappPhone,
     whatsappProvided: !!whatsapp_number,
+    clinicId: parsedClinicId || 1
   });
 
   const newCase = caseService.openCase({
@@ -147,6 +150,7 @@ function handleSaveCaseDetails(args, callId) {
     issueDescription: issue_description || null,
     urgency: 'pending',
     retellCallId: callId,
+    clinicId: isNaN(parsedClinicId) ? 1 : parsedClinicId,
   });
 
   return {
@@ -168,7 +172,6 @@ function handleDetermineUrgency(args, callId) {
 
   // If we have a case_id, update the case with the urgency
   if (case_id) {
-    const db = require('../database');
     db.updateCase(case_id, { urgency: triageResult.urgency });
     db.addAuditLog(case_id, 'triage_completed', triageResult);
   }
@@ -197,7 +200,6 @@ async function handleTriggerEscalation(args, callId) {
   }
 
   // Update case urgency to urgent if not already
-  const db = require('../database');
   db.updateCase(case_id, { urgency: 'urgent' });
 
   // Start escalation asynchronously (don't block the call)
@@ -236,7 +238,9 @@ async function handleLogNonUrgentCase(args, callId) {
     const updatedCase = caseService.getCase(case_id);
     const callerWhatsapp = updatedCase.caller_whatsapp || updatedCase.caller_phone;
     if (callerWhatsapp) {
-      await whatsappService.notifyCallerLogged(callerWhatsapp, updatedCase);
+      const clinic = caseData.clinic_id ? db.getClinicById(caseData.clinic_id) : null;
+      const clinicName = clinic ? clinic.name : undefined;
+      await whatsappService.notifyCallerLogged(callerWhatsapp, updatedCase, clinicName);
     }
   } catch (err) {
     logger.warn(`Failed to send non-urgent WhatsApp to caller`, { error: err.message });

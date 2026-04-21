@@ -1,6 +1,9 @@
 // ============================================
 // Glasslyn Vets — SQLite Database
 // ============================================
+// Multi-Clinic Edition — clinics table, per-clinic
+// vet assignments, and DID-based routing queries.
+
 const Database = require('better-sqlite3');
 const path = require('path');
 const logger = require('./utils/logger');
@@ -28,6 +31,13 @@ function initDatabase() {
 
   // Create tables
   db.exec(`
+    CREATE TABLE IF NOT EXISTS clinics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      did TEXT UNIQUE NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS callers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       phone TEXT UNIQUE NOT NULL,
@@ -46,6 +56,8 @@ function initDatabase() {
       issue_description TEXT,
       urgency TEXT CHECK(urgency IN ('urgent', 'non_urgent', 'pending')) DEFAULT 'pending',
       status TEXT CHECK(status IN ('open', 'collecting', 'escalating', 'accepted', 'rejected', 'failover', 'closed', 'logged')) DEFAULT 'open',
+      clinic_id INTEGER,
+      dialled_number TEXT,
       assigned_vet_name TEXT,
       assigned_vet_phone TEXT,
       vet_response TEXT,
@@ -68,9 +80,11 @@ function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
+      clinic_id INTEGER REFERENCES clinics(id),
       level_order INTEGER NOT NULL
     );
 
+    CREATE INDEX IF NOT EXISTS idx_clinics_did ON clinics(did);
     CREATE INDEX IF NOT EXISTS idx_callers_phone ON callers(phone);
     CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
     CREATE INDEX IF NOT EXISTS idx_cases_caller_phone ON cases(caller_phone);
@@ -78,34 +92,118 @@ function initDatabase() {
   `);
 
   // ─── Migrations ─────────────────────────────────────
-  // Add caller_whatsapp column if it doesn't exist (for existing databases)
-  try {
-    const columns = db.prepare("PRAGMA table_info(cases)").all();
-    const hasWhatsappCol = columns.some(c => c.name === 'caller_whatsapp');
-    if (!hasWhatsappCol) {
-      db.exec("ALTER TABLE cases ADD COLUMN caller_whatsapp TEXT");
-      logger.info('Migration: Added caller_whatsapp column to cases table');
-    }
-  } catch (migrationErr) {
-    logger.warn('Migration check for caller_whatsapp failed (may already exist)', { error: migrationErr.message });
-  }
+  runMigrations();
+
+  // Create indexes that depend on columns added by migrations
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_cases_clinic_id ON cases(clinic_id);
+    CREATE INDEX IF NOT EXISTS idx_vets_clinic_id ON vets(clinic_id);
+  `);
+
+  // ─── Migrations ─────────────────────────────────────
+  runMigrations();
 
   logger.info('Database initialised', { path: DB_PATH });
 
-  // Seed vets table if it's empty
-  const vetCount = db.prepare('SELECT COUNT(*) as count FROM vets').get().count;
-  if (vetCount === 0 && config.vets && config.vets.length > 0) {
-    logger.info('Vets table is empty. Seeding from config...');
-    const insertVet = db.prepare('INSERT INTO vets (name, phone, level_order) VALUES (?, ?, ?)');
-    config.vets.forEach((vet, index) => {
-      // Only insert if it has a valid-looking phone or name
-      if (vet.name && vet.phone) {
-        insertVet.run(vet.name, vet.phone, index + 1);
-      }
-    });
-  }
+  // Seed clinics from config
+  seedClinics();
+
+  // Seed vets from config
+  seedVets();
 
   return db;
+}
+
+/**
+ * Run schema migrations for existing databases being upgraded
+ * from the single-clinic version to multi-clinic.
+ */
+function runMigrations() {
+  const columns = db.prepare("PRAGMA table_info(cases)").all();
+  const columnNames = columns.map(c => c.name);
+
+  // Migration: Add caller_whatsapp to cases
+  if (!columnNames.includes('caller_whatsapp')) {
+    db.exec("ALTER TABLE cases ADD COLUMN caller_whatsapp TEXT");
+    logger.info('Migration: Added caller_whatsapp column to cases table');
+  }
+
+  // Migration: Add clinic_id to cases
+  if (!columnNames.includes('clinic_id')) {
+    db.exec("ALTER TABLE cases ADD COLUMN clinic_id INTEGER");
+    logger.info('Migration: Added clinic_id column to cases table');
+  }
+
+  // Migration: Add dialled_number to cases
+  if (!columnNames.includes('dialled_number')) {
+    db.exec("ALTER TABLE cases ADD COLUMN dialled_number TEXT");
+    logger.info('Migration: Added dialled_number column to cases table');
+  }
+
+  // Migration: Add clinic_id to vets
+  const vetColumns = db.prepare("PRAGMA table_info(vets)").all();
+  const vetColumnNames = vetColumns.map(c => c.name);
+  if (!vetColumnNames.includes('clinic_id')) {
+    db.exec("ALTER TABLE vets ADD COLUMN clinic_id INTEGER REFERENCES clinics(id)");
+    logger.info('Migration: Added clinic_id column to vets table');
+  }
+
+  // Migration: Create clinics table if it doesn't exist (in case of upgrade)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clinics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      did TEXT UNIQUE NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_clinics_did ON clinics(did);
+  `);
+}
+
+/**
+ * Seed clinics table from config if empty.
+ */
+function seedClinics() {
+  const clinicCount = db.prepare('SELECT COUNT(*) as count FROM clinics').get().count;
+  if (clinicCount === 0 && config.clinics.length > 0) {
+    logger.info('Clinics table is empty. Seeding from config...');
+    const insertClinic = db.prepare('INSERT INTO clinics (name, did) VALUES (?, ?)');
+    for (const clinic of config.clinics) {
+      insertClinic.run(clinic.name, clinic.did);
+      logger.info(`  Seeded clinic: ${clinic.name} (DID: ${clinic.did})`);
+    }
+  }
+}
+
+/**
+ * Seed vets table from config if empty.
+ * Each vet is assigned to a clinic via clinic_id.
+ */
+function seedVets() {
+  const vetCount = db.prepare('SELECT COUNT(*) as count FROM vets').get().count;
+  if (vetCount === 0 && config.vetSeeds.length > 0) {
+    logger.info('Vets table is empty. Seeding from config...');
+
+    // Build a lookup: clinicNumber (1-4) → clinic DB id
+    const allClinics = db.prepare('SELECT * FROM clinics ORDER BY id ASC').all();
+    const clinicIdMap = {};
+    allClinics.forEach((c, idx) => {
+      clinicIdMap[idx + 1] = c.id; // clinicNumber 1 → first clinic's DB id, etc.
+    });
+
+    const insertVet = db.prepare('INSERT INTO vets (name, phone, clinic_id, level_order) VALUES (?, ?, ?, ?)');
+
+    // Track per-clinic order so level_order is scoped to each clinic
+    const clinicOrder = {};
+
+    for (const vet of config.vetSeeds) {
+      const clinicDbId = clinicIdMap[vet.clinicNumber] || allClinics[0]?.id || 1;
+      clinicOrder[clinicDbId] = (clinicOrder[clinicDbId] || 0) + 1;
+
+      insertVet.run(vet.name, vet.phone, clinicDbId, clinicOrder[clinicDbId]);
+      logger.info(`  Seeded vet: ${vet.name} → Clinic ${vet.clinicNumber} (level ${clinicOrder[clinicDbId]})`);
+    }
+  }
 }
 
 /**
@@ -116,6 +214,61 @@ function getDb() {
     throw new Error('Database not initialised. Call initDatabase() first.');
   }
   return db;
+}
+
+// ─── Clinic Queries ───────────────────────────────────
+
+/**
+ * Find a clinic by its DID (inbound phone number).
+ * Strips formatting chars to do a normalised match.
+ */
+function findClinicByDID(did) {
+  const cleaned = did.replace(/[\s\-\(\)\+]/g, '');
+  return getDb().prepare(`
+    SELECT * FROM clinics 
+    WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(did, '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') = ?
+  `).get(cleaned);
+}
+
+/**
+ * Get all clinics.
+ */
+function getAllClinics() {
+  return getDb().prepare('SELECT * FROM clinics ORDER BY id ASC').all();
+}
+
+/**
+ * Get a clinic by ID.
+ */
+function getClinicById(clinicId) {
+  return getDb().prepare('SELECT * FROM clinics WHERE id = ?').get(clinicId);
+}
+
+/**
+ * Add a new clinic.
+ */
+function addClinic(name, did) {
+  const result = getDb().prepare('INSERT INTO clinics (name, did) VALUES (?, ?)').run(name, did);
+  return { id: result.lastInsertRowid, name, did };
+}
+
+/**
+ * Update a clinic.
+ */
+function updateClinic(id, updates) {
+  const expected = ['name', 'did'];
+  const clauses = [];
+  const args = [];
+  for (const k of expected) {
+    if (updates[k] !== undefined) {
+      clauses.push(`${k} = ?`);
+      args.push(updates[k]);
+    }
+  }
+  if (clauses.length === 0) return true;
+  args.push(id);
+  getDb().prepare(`UPDATE clinics SET ${clauses.join(', ')} WHERE id = ?`).run(...args);
+  return true;
 }
 
 // ─── Caller Queries ───────────────────────────────────
@@ -159,8 +312,8 @@ function upsertCaller(phone, name, eircode) {
  */
 function createCase(caseData) {
   const stmt = getDb().prepare(`
-    INSERT INTO cases (id, caller_phone, caller_whatsapp, caller_name, eircode, issue_description, urgency, status, retell_call_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO cases (id, caller_phone, caller_whatsapp, caller_name, eircode, issue_description, urgency, status, clinic_id, dialled_number, retell_call_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   stmt.run(
     caseData.id,
@@ -171,6 +324,8 @@ function createCase(caseData) {
     caseData.issue_description || null,
     caseData.urgency || 'pending',
     caseData.status || 'open',
+    caseData.clinic_id || null,
+    caseData.dialled_number || null,
     caseData.retell_call_id || null
   );
   return getCaseById(caseData.id);
@@ -189,7 +344,8 @@ function getCaseById(caseId) {
 function updateCase(caseId, updates) {
   const allowedFields = [
     'caller_name', 'caller_phone', 'caller_whatsapp', 'eircode', 'issue_description',
-    'urgency', 'status', 'assigned_vet_name', 'assigned_vet_phone',
+    'urgency', 'status', 'clinic_id', 'dialled_number',
+    'assigned_vet_name', 'assigned_vet_phone',
     'vet_response', 'vet_eta', 'escalation_level', 'retell_call_id'
   ];
 
@@ -242,17 +398,41 @@ function getActiveCases() {
 
 // ─── Vet Queries ──────────────────────────────────────
 
+/**
+ * Get all vets (all clinics), with clinic name joined.
+ */
 function getAllVets() {
-  return getDb().prepare('SELECT * FROM vets ORDER BY level_order ASC').all();
+  return getDb().prepare(`
+    SELECT vets.*, clinics.name as clinic_name 
+    FROM vets 
+    LEFT JOIN clinics ON vets.clinic_id = clinics.id
+    ORDER BY vets.clinic_id ASC, vets.level_order ASC
+  `).all();
 }
 
-function addVet(name, phone, level_order) {
-  const result = getDb().prepare('INSERT INTO vets (name, phone, level_order) VALUES (?, ?, ?)').run(name, phone, level_order);
-  return { id: result.lastInsertRowid, name, phone, level_order };
+/**
+ * Get vets for a specific clinic, ordered by escalation priority.
+ * This is the key function for multi-clinic routing.
+ */
+function getVetsByClinic(clinicId) {
+  return getDb().prepare(`
+    SELECT vets.*, clinics.name as clinic_name
+    FROM vets
+    LEFT JOIN clinics ON vets.clinic_id = clinics.id
+    WHERE vets.clinic_id = ?
+    ORDER BY vets.level_order ASC
+  `).all(clinicId);
+}
+
+function addVet(name, phone, level_order, clinic_id) {
+  const result = getDb().prepare(
+    'INSERT INTO vets (name, phone, level_order, clinic_id) VALUES (?, ?, ?, ?)'
+  ).run(name, phone, level_order, clinic_id || null);
+  return { id: result.lastInsertRowid, name, phone, level_order, clinic_id };
 }
 
 function updateVet(id, updates) {
-  const expected = ['name', 'phone', 'level_order'];
+  const expected = ['name', 'phone', 'level_order', 'clinic_id'];
   const clauses = [];
   const args = [];
   for (const k of expected) {
@@ -304,18 +484,30 @@ function closeDatabase() {
 module.exports = {
   initDatabase,
   getDb,
+  // Clinics
+  findClinicByDID,
+  getAllClinics,
+  getClinicById,
+  addClinic,
+  updateClinic,
+  // Callers
   findCallerByPhone,
   upsertCaller,
+  // Cases
   createCase,
   getCaseById,
   updateCase,
   findActiveCaseForVet,
   getActiveCases,
+  // Vets
   getAllVets,
+  getVetsByClinic,
   addVet,
   updateVet,
   deleteVet,
+  // Audit
   addAuditLog,
   getAuditLog,
+  // Lifecycle
   closeDatabase,
 };

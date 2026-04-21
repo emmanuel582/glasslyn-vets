@@ -69,7 +69,11 @@ For **each function** below:
     },
     "phone": {
       "type": "string",
-      "description": "Caller's phone number"
+      "description": "The phone number the caller is calling FROM (the calling number)"
+    },
+    "whatsapp_number": {
+      "type": "string",
+      "description": "The caller's WhatsApp phone number. If the caller confirmed their calling number IS their WhatsApp, pass the same number. If they provided a DIFFERENT WhatsApp number, pass that number here. Always pass the actual digits, never a placeholder."
     },
     "eircode": {
       "type": "string",
@@ -78,9 +82,13 @@ For **each function** below:
     "issue_description": {
       "type": "string",
       "description": "Detailed description of the pet's issue as described by the caller"
+    },
+    "clinic_id": {
+      "type": "string",
+      "description": "The clinic ID from the dynamic variable {{clinic_id}}. Always pass {{clinic_id}} here."
     }
   },
-  "required": ["name", "phone", "issue_description"]
+  "required": ["name", "phone", "whatsapp_number", "issue_description", "clinic_id"]
 }
 ```
 
@@ -193,35 +201,3 @@ For **each function** below:
   "result": "{\"status\": \"logged\", \"message\": \"Your case has been logged. The clinic will follow up when they reopen.\"}"
 }
 ```
-
----
-
-## Outbound Notification Agent
-
-You also need a **separate agent** for the outbound vet notification call. This is a simple agent that delivers a short message and hangs up.
-
-### Create a new agent in Retell Dashboard:
-
-| Field | Value |
-|-------|-------|
-| **Name** | `Vet Notification Agent` |
-| **Voice** | Any clear, professional voice |
-
-### System Prompt for Outbound Agent:
-
-```
-You are making a brief notification call on behalf of Glasslyn Vets Veterinary Practice.
-
-Your ONLY task is to deliver this message and end the call:
-
-"Hello {{vet_name}}, this is an urgent notification from Glasslyn Vets. You have a new urgent case that requires your attention. Please check your WhatsApp immediately for the full case details and response options. The case reference is {{case_id}}. Thank you."
-
-After delivering this message:
-- If the vet acknowledges (says "okay", "got it", "thanks", etc.), say "Thank you. Goodbye." and end the call.
-- If there is no answer or voicemail, deliver the message to the voicemail and end the call.
-- Do NOT engage in conversation. Do NOT answer medical questions. Just deliver the notification.
-```
-
-### Notes:
-- `{{vet_name}}` and `{{case_id}}` are dynamic variables passed via the `retell_llm_dynamic_variables` parameter when making the outbound call
-- Set the **Agent ID** of this outbound agent as `RETELL_OUTBOUND_AGENT_ID` in your `.env` file

@@ -169,7 +169,8 @@ async function startServer() {
     logger.info('════════════════════════════════════════════');
     logger.info('');
     logger.info('Configure these URLs in your Retell dashboard:');
-    logger.info(`  Agent Webhook URL:  ${config.server.baseUrl}/retell/webhook`);
+    logger.info(`  Fallback/Events Webhook URL:  ${config.server.baseUrl}/retell/webhook`);
+    logger.info(`  Inbound Webhook URL (for Phone Numbers): ${config.server.baseUrl}/retell/webhook/inbound`);
     logger.info(`  Custom Function URLs — set each function endpoint to:`);
     logger.info(`    ${config.server.baseUrl}/retell/functions`);
     logger.info('');

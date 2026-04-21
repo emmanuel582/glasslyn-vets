@@ -111,8 +111,8 @@ async function sendMessage(phone, message) {
  * Send urgent case details to the on-call vet.
  * Includes formatted case info and response options.
  */
-async function sendCaseToVet(vetPhone, caseData) {
-  const clinicName = config.clinic.name;
+async function sendCaseToVet(vetPhone, caseData, clinicNameParam) {
+  const clinicName = clinicNameParam || 'Glasslyn Vets';
 
   // Use the WhatsApp number if available, otherwise fall back to caller_phone
   const callerContactPhone = caseData.caller_whatsapp || caseData.caller_phone;
@@ -139,9 +139,18 @@ async function sendCaseToVet(vetPhone, caseData) {
 /**
  * Notify the caller that a vet has accepted and is on the way.
  */
-async function notifyCallerAccepted(callerPhone, caseData, eta) {
-  const clinicName = config.clinic.name;
-  const clinicPhone = config.clinic.phone;
+async function notifyCallerAccepted(callerPhone, caseData, eta, clinicNameParam) {
+  const clinicName = clinicNameParam || 'Glasslyn Vets';
+  
+  // Try to find the clinic to get its phone number for the message, if we can't find it, fallback
+  let clinicPhoneStr = 'the clinic';
+  if (caseData.clinic_id) {
+    const db = require('../database');
+    const clinic = db.getClinicById(caseData.clinic_id);
+    if(clinic && clinic.did) {
+      clinicPhoneStr = clinic.did;
+    }
+  }
 
   const etaText = eta === 'within_1_hour'
     ? 'within 1 hour'
@@ -153,7 +162,7 @@ async function notifyCallerAccepted(callerPhone, caseData, eta) {
     `A vet has accepted your case and is on the way.\n\n` +
     `📋 *Case ID:* ${caseData.id}\n` +
     `📍 *Estimated arrival:* ${etaText}\n\n` +
-    `If you need to reach us, please call ${clinicPhone || 'the clinic'}.\n\n` +
+    `If you need to reach us, please call ${clinicPhoneStr}.\n\n` +
     `— ${clinicName}`;
 
   return await sendMessage(callerPhone, message);
@@ -162,9 +171,8 @@ async function notifyCallerAccepted(callerPhone, caseData, eta) {
 /**
  * Notify the caller that their non-urgent case has been logged.
  */
-async function notifyCallerLogged(callerPhone, caseData) {
-  const clinicName = config.clinic.name;
-  const clinicPhone = config.clinic.phone;
+async function notifyCallerLogged(callerPhone, caseData, clinicNameParam) {
+  const clinicName = clinicNameParam || 'Glasslyn Vets';
 
   const message =
     `📝 *${clinicName} — Case Logged*\n\n` +

@@ -2,6 +2,7 @@
 // Glasslyn Vets — Case Service
 // ============================================
 // High-level case management operations.
+// Multi-Clinic Edition — cases are now tied to a clinic.
 
 const logger = require('../utils/logger');
 const { generateCaseId } = require('../utils/helpers');
@@ -9,8 +10,9 @@ const db = require('../database');
 
 /**
  * Create a new case from collected call data.
+ * Now accepts clinicId to tie the case to a specific clinic location.
  */
-function openCase({ callerPhone, callerWhatsapp, callerName, eircode, issueDescription, urgency, retellCallId }) {
+function openCase({ callerPhone, callerWhatsapp, callerName, eircode, issueDescription, urgency, retellCallId, clinicId, dialledNumber }) {
   const caseId = generateCaseId();
 
   const newCase = db.createCase({
@@ -22,6 +24,8 @@ function openCase({ callerPhone, callerWhatsapp, callerName, eircode, issueDescr
     issue_description: issueDescription || null,
     urgency: urgency || 'pending',
     status: 'open',
+    clinic_id: clinicId || null,
+    dialled_number: dialledNumber || null,
     retell_call_id: retellCallId || null,
   });
 
@@ -35,10 +39,11 @@ function openCase({ callerPhone, callerWhatsapp, callerName, eircode, issueDescr
     callerName,
     eircode,
     urgency,
+    clinicId,
     retellCallId,
   });
 
-  logger.info(`Case created: ${caseId}`, { caseId, callerPhone, urgency });
+  logger.info(`Case created: ${caseId}`, { caseId, callerPhone, urgency, clinicId });
   return newCase;
 }
 

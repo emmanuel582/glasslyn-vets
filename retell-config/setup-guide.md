@@ -84,22 +84,26 @@ For the **Wealth Clinic Receptionist** agent:
    - Header: `Content-Type: application/json`
 3. Save each function
 
-### 2.5 Set Up Webhooks
+### 2.5 Set Up Event Webhooks
 
 1. Go to the agent settings → **Webhook** section
-2. Set **Webhook URL** to: `http://187.124.55.32:3000/retell/webhook`
+2. Set **Webhook URL** to: `http://187.124.55.32:3000/retell/webhook` (This is the Fallback/Events webhook)
 3. Enable events: `call_started`, `call_ended`, `call_analyzed`
 4. Copy the **Webhook Secret** → paste into `.env` as `RETELL_WEBHOOK_SECRET`
 
-### 2.6 Import/Purchase a Phone Number
+### 2.6 Import/Purchase a Phone Number & Set Inbound Webhook
+
+Because we use multi-clinic dynamic routing, you do NOT attach the agent directly to the number. Instead, you use an Inbound Webhook URL.
 
 1. Go to **Phone Numbers** in the Retell dashboard
 2. Either:
-   - **Purchase** a new number (if available in Ireland/UK)
+   - **Purchase** a new number
    - **Import** your existing number via SIP trunk (see Step 3)
-3. Assign the **Wealth Clinic Receptionist** as the inbound agent
-4. Assign the **Vet Notification Agent** as the outbound agent
-5. Copy the number → paste into `.env` as `RETELL_FROM_NUMBER`
+3. Under the phone number settings, look for **Inbound Webhook URL**.
+4. Set the Inbound Webhook URL to: `http://187.124.55.32:3000/retell/webhook/inbound`
+   *(This webhook dynamically determines the clinic and returns the correct context)*
+5. Note down the phone number (DID) and make sure it is added to your internal `clinics` database.
+6. Copy the number → paste into `.env` as `RETELL_FROM_NUMBER` (used for outbound calls)
 
 ---
 

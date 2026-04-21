@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../utils/logger');
 const db = require('../database');
+const { normalisePhone } = require('../utils/helpers');
 
 /**
  * POST /retell/webhook
@@ -121,9 +122,10 @@ function handleCallAnalyzed(call) {
 }
 
 /**
- * POST /inbound
+ * POST /retell/webhook/inbound
  * Receives the initial inbound webhook from Retell BEFORE a call connects.
- * Used to extract the caller's phone number and inject it into the LLM context.
+ * Used to extract the caller's phone number and the dialled DID to
+ * determine which clinic they reached.
  */
 router.post('/inbound', (req, res) => {
   try {
@@ -131,12 +133,27 @@ router.post('/inbound', (req, res) => {
 
     logger.info(`Retell inbound webhook received`, { from_number, to_number, call_id });
 
-    // Inject the from_number as a dynamic variable into the LLM context
+    // Look up which clinic this DID belongs to
+    const clinic = db.findClinicByDID(normalisePhone(to_number));
+    
+    if (clinic) {
+      logger.info(`Call routed to clinic: ${clinic.name}`, { clinicId: clinic.id });
+    } else {
+      logger.warn(`DID ${to_number} not found in clinics table. Falling back to default.`);
+    }
+
+    const { config } = require('../config');
+
+    // Inject the dynamic variables into the LLM context
     return res.status(200).json({
+      override_agent_id: config.retell.agentId,
       dynamic_variables: {
-        caller_phone: from_number || "Unknown"
+        caller_phone: from_number || "Unknown",
+        clinic_id: clinic ? clinic.id.toString() : "1",
+        clinic_name: clinic ? clinic.name : "Glasslyn Vets"
       }
     });
+
   } catch (err) {
     logger.error('Error processing Retell inbound webhook', { error: err.message });
     return res.status(500).json({ error: 'Internal server error' });

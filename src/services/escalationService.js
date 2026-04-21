@@ -3,6 +3,8 @@
 // ============================================
 // Orchestrates the entire vet notification and
 // failover workflow for urgent cases.
+// Multi-Clinic Edition — only escalates to vets
+// assigned to the case's clinic.
 
 const logger = require('../utils/logger');
 const { config } = require('../config');
@@ -17,9 +19,11 @@ const escalationTimers = new Map();
 
 /**
  * Start the full escalation workflow for an urgent case.
- * 1. Notify primary vet (call + WhatsApp)
- * 2. Start 15-minute timeout
- * 3. If no response or rejection → escalate to secondary vet
+ * 1. Resolve which clinic this case belongs to
+ * 2. Get ONLY the vets for that clinic
+ * 3. Notify the next vet in that clinic's escalation ladder
+ * 4. Start 15-minute timeout
+ * 5. If no response or rejection → escalate to the next vet in the SAME clinic
  *
  * @param {string} caseId - The case ID to escalate
  */
@@ -34,32 +38,54 @@ async function escalateCase(caseId) {
   const currentLevel = (caseData.escalation_level || 0) + 1;
   const vetIndex = currentLevel - 1;
 
-  // Fetch all vets dynamically from the database
-  const allVets = db.getAllVets();
+  // ── KEY CHANGE: Get vets for THIS clinic only ──
+  const clinicId = caseData.clinic_id || 1;
+  const clinicVets = db.getVetsByClinic(clinicId);
 
-  if (vetIndex >= allVets.length) {
-    // All vets exhausted
-    logger.error(`All ${allVets.length} vets exhausted for case ${caseId}. Manual intervention required.`);
-    db.addAuditLog(caseId, 'all_vets_exhausted', {
-      message: 'All configured vets failed to respond or rejected.',
+  // Resolve clinic name for notifications
+  const clinic = db.getClinicById(clinicId);
+  const clinicName = clinic ? clinic.name : 'Glasslyn Vets';
+  const clinicDID = clinic ? clinic.did : config.retell.fromNumber;
+
+  if (clinicVets.length === 0) {
+    logger.error(`No vets configured for clinic ${clinicId} (${clinicName}). Cannot escalate case ${caseId}.`);
+    db.addAuditLog(caseId, 'no_vets_for_clinic', {
+      clinicId,
+      clinicName,
+      message: 'No vets assigned to this clinic.',
     });
     db.updateCase(caseId, { status: 'closed' });
     return;
   }
 
-  const vet = allVets[vetIndex];
+  if (vetIndex >= clinicVets.length) {
+    // All vets in this clinic exhausted
+    logger.error(`All ${clinicVets.length} vets exhausted for clinic ${clinicName}, case ${caseId}. Manual intervention required.`);
+    db.addAuditLog(caseId, 'all_vets_exhausted', {
+      clinicId,
+      clinicName,
+      totalVets: clinicVets.length,
+      message: 'All configured vets for this clinic failed to respond or rejected.',
+    });
+    db.updateCase(caseId, { status: 'closed' });
+    return;
+  }
+
+  const vet = clinicVets[vetIndex];
 
   if (!vet.phone) {
-    logger.error(`No phone number configured for level ${currentLevel} vet`);
+    logger.error(`No phone number configured for level ${currentLevel} vet in clinic ${clinicName}`);
     // Try next level
     db.updateCase(caseId, { escalation_level: currentLevel });
     return escalateCase(caseId);
   }
 
-  logger.info(`Escalating case ${caseId} to level ${currentLevel}: ${vet.name}`, {
+  logger.info(`Escalating case ${caseId} to level ${currentLevel}: ${vet.name} (Clinic: ${clinicName})`, {
     caseId,
     vetName: vet.name,
     vetPhone: vet.phone,
+    clinicId,
+    clinicName,
     level: currentLevel,
   });
 
@@ -72,8 +98,12 @@ async function escalateCase(caseId) {
   try {
     // Step 1: Make outbound call to vet — "Check your WhatsApp"
     try {
-      await retellService.callVetNotification(vet.phone, vet.name, caseId);
-      db.addAuditLog(caseId, 'vet_call_initiated', { vetName: vet.name, vetPhone: vet.phone });
+      await retellService.callVetNotification(vet.phone, vet.name, caseId, clinicName, clinicDID);
+      db.addAuditLog(caseId, 'vet_call_initiated', {
+        vetName: vet.name,
+        vetPhone: vet.phone,
+        clinicName,
+      });
     } catch (callErr) {
       logger.error(`Outbound call to vet failed, continuing with WhatsApp`, {
         caseId,
@@ -84,8 +114,12 @@ async function escalateCase(caseId) {
 
     // Step 2: Send WhatsApp message with case details + response options
     try {
-      await whatsappService.sendCaseToVet(vet.phone, updatedCase);
-      db.addAuditLog(caseId, 'whatsapp_sent_to_vet', { vetName: vet.name, vetPhone: vet.phone });
+      await whatsappService.sendCaseToVet(vet.phone, updatedCase, clinicName);
+      db.addAuditLog(caseId, 'whatsapp_sent_to_vet', {
+        vetName: vet.name,
+        vetPhone: vet.phone,
+        clinicName,
+      });
     } catch (waErr) {
       logger.error(`WhatsApp message to vet failed`, {
         caseId,
@@ -196,6 +230,10 @@ async function handleVetResponse(vetPhone, response) {
   const caseId = activeCase.id;
   logger.info(`Vet response received for case ${caseId}`, { vetPhone: cleanedPhone, response });
 
+  // Resolve clinic name for notifications
+  const clinic = activeCase.clinic_id ? db.getClinicById(activeCase.clinic_id) : null;
+  const clinicName = clinic ? clinic.name : 'Glasslyn Vets';
+
   const trimmedResponse = response.trim();
 
   if (trimmedResponse === '1') {
@@ -208,7 +246,7 @@ async function handleVetResponse(vetPhone, response) {
     const updatedCase = caseService.getCase(caseId);
     const callerWhatsapp = updatedCase.caller_whatsapp || updatedCase.caller_phone;
     try {
-      await whatsappService.notifyCallerAccepted(callerWhatsapp, updatedCase, 'within_1_hour');
+      await whatsappService.notifyCallerAccepted(callerWhatsapp, updatedCase, 'within_1_hour', clinicName);
       db.addAuditLog(caseId, 'caller_notified', { eta: 'within_1_hour', sentTo: callerWhatsapp });
     } catch (err) {
       logger.error(`Failed to notify caller`, { caseId, error: err.message });
@@ -226,7 +264,7 @@ async function handleVetResponse(vetPhone, response) {
     const updatedCase = caseService.getCase(caseId);
     const callerWhatsapp = updatedCase.caller_whatsapp || updatedCase.caller_phone;
     try {
-      await whatsappService.notifyCallerAccepted(callerWhatsapp, updatedCase, 'over_1_hour');
+      await whatsappService.notifyCallerAccepted(callerWhatsapp, updatedCase, 'over_1_hour', clinicName);
       db.addAuditLog(caseId, 'caller_notified', { eta: 'over_1_hour', sentTo: callerWhatsapp });
     } catch (err) {
       logger.error(`Failed to notify caller`, { caseId, error: err.message });
