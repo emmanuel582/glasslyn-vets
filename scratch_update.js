@@ -5,16 +5,13 @@ const dbPath = path.resolve(__dirname, 'data', 'clinic.db');
 try {
   const db = new Database(dbPath);
   
-  // Update Clinic 2
-  db.prepare('UPDATE clinics SET did = ? WHERE id = ?').run('+3530212296063', 2);
+  // Update Clinic 2 payload exact format E.164
+  db.prepare('UPDATE clinics SET did = ? WHERE id = ?').run('+353212296063', 2);
   
-  // Update Clinic 3 
-  db.prepare('UPDATE clinics SET did = ? WHERE id = ?').run('+3530212296062', 3);
+  // Update Clinic 3 payload exact format E.164
+  db.prepare('UPDATE clinics SET did = ? WHERE id = ?').run('+353212296062', 3);
   
-  // Update Clinic 4
-  db.prepare('UPDATE clinics SET did = ? WHERE id = ?').run('+3532955925', 4);
-  
-  console.log('Database updated with new phone numbers.');
+  console.log('Database updated: Corrected leading zeros in Irish phone numbers.');
   db.close();
 } catch (e) {
   console.error('Error updating DB:', e);
