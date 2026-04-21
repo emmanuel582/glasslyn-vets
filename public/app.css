@@ -1,13 +1,15 @@
 :root {
-  --bg-color: #030303;
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-hover: rgba(255, 255, 255, 0.08);
-  --glass-highlight: rgba(255, 255, 255, 0.15);
-  --text-main: #ffffff;
-  --text-muted: rgba(255, 255, 255, 0.5);
+  --bg-color: #05050f;
+  --glass-bg: rgba(20, 20, 35, 0.4);
+  --glass-border: rgba(100, 150, 255, 0.15);
+  --glass-hover: rgba(100, 150, 255, 0.25);
+  --glass-highlight: rgba(120, 180, 255, 0.4);
+  --accent: #5e6ad2;
+  --accent-glow: #8ca0ff;
+  --text-main: #f0f4ff;
+  --text-muted: rgba(240, 244, 255, 0.6);
   --text-dark: #000000;
-  --border-radius: 16px;
+  --border-radius: 20px;
   --transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -18,40 +20,40 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Outfit', 'Inter', sans-serif;
   background-color: var(--bg-color);
   color: var(--text-main);
   height: 100vh;
   overflow: hidden;
   background-image:
-    radial-gradient(circle at 15% 50%, rgba(255, 255, 255, 0.03) 0%, transparent 50%),
-    radial-gradient(circle at 85% 30%, rgba(255, 255, 255, 0.02) 0%, transparent 50%);
+    radial-gradient(circle at 10% 40%, rgba(94, 106, 210, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 90% 60%, rgba(200, 100, 255, 0.1) 0%, transparent 40%);
 }
 
 /* Ambient Orbs */
 .ambient-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
+  filter: blur(120px);
   z-index: 0;
-  animation: float 20s infinite alternate ease-in-out;
+  animation: float 25s infinite alternate ease-in-out;
 }
 
 .orb-1 {
-  width: 400px;
-  height: 400px;
-  background: rgba(255, 255, 255, 0.05);
-  top: -100px;
-  left: -100px;
+  width: 500px;
+  height: 500px;
+  background: rgba(94, 106, 210, 0.2);
+  top: -150px;
+  left: -150px;
 }
 
 .orb-2 {
-  width: 600px;
-  height: 600px;
-  background: rgba(255, 255, 255, 0.03);
-  bottom: -200px;
-  right: -100px;
-  animation-delay: -10s;
+  width: 700px;
+  height: 700px;
+  background: rgba(180, 80, 255, 0.15);
+  bottom: -250px;
+  right: -150px;
+  animation-delay: -12s;
 }
 
 @keyframes float {
@@ -93,25 +95,32 @@ body {
 
 .brand {
   margin-bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .brand h1 {
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  background: linear-gradient(135deg, #fff, #aab2ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .badge {
   display: inline-block;
-  background: #fff;
-  color: #000;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 4px;
+  background: linear-gradient(135deg, var(--accent), #9452ff);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
   margin-top: 8px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  box-shadow: 0 4px 15px rgba(94, 106, 210, 0.4);
 }
 
 .nav-menu {
@@ -127,38 +136,42 @@ body {
   color: var(--text-muted);
   font-family: inherit;
   font-size: 15px;
-  font-weight: 500;
-  padding: 12px 16px;
-  border-radius: 12px;
+  font-weight: 600;
+  padding: 14px 20px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   cursor: pointer;
   transition: var(--transition);
   text-align: left;
+  border: 1px solid transparent;
 }
 
 .nav-btn svg {
-  width: 18px;
-  height: 18px;
-  opacity: 0.7;
+  width: 20px;
+  height: 20px;
+  opacity: 0.6;
   transition: var(--transition);
 }
 
 .nav-btn:hover {
   background: var(--glass-hover);
   color: var(--text-main);
-  transform: translateX(4px);
+  transform: translateX(6px);
+  border-color: var(--glass-border);
 }
 
 .nav-btn.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, rgba(94, 106, 210, 0.2), rgba(180, 80, 255, 0.1));
   color: var(--text-main);
-  border: 1px solid var(--glass-highlight);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 20px rgba(94, 106, 210, 0.2);
 }
 
 .nav-btn.active svg {
   opacity: 1;
+  color: var(--accent-glow);
 }
 
 .system-status {
@@ -288,22 +301,22 @@ body {
 .datagrid th {
   position: sticky;
   top: 0;
-  background: rgba(10, 10, 10, 0.95);
-  backdrop-filter: blur(10px);
-  padding: 16px 24px;
+  background: rgba(10, 10, 20, 0.95);
+  backdrop-filter: blur(12px);
+  padding: 18px 24px;
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   color: var(--text-muted);
-  font-weight: 600;
-  border-bottom: 1px solid var(--glass-border);
+  font-weight: 700;
+  border-bottom: 2px solid var(--glass-border);
   z-index: 10;
   transition: var(--transition);
 }
 
 .datagrid th:hover {
-  color: #fff;
-  background: rgba(30, 30, 30, 0.95);
+  color: var(--accent-glow);
+  background: rgba(20, 20, 40, 0.95);
 }
 
 .datagrid th.sort-asc::after {
@@ -339,24 +352,26 @@ body {
 
 /* Specific Cell Styles */
 .badge-urgent {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  color: #fff;
-  padding: 4px 10px;
+  background: rgba(255, 50, 100, 0.15);
+  border: 1px solid rgba(255, 50, 100, 0.5);
+  color: #ff85a1;
+  padding: 6px 12px;
   border-radius: 20px;
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  box-shadow: 0 0 10px rgba(255, 50, 100, 0.2);
 }
 
 .badge-normal {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-muted);
-  padding: 4px 10px;
+  background: rgba(100, 200, 255, 0.1);
+  color: #8edcff;
+  border: 1px solid rgba(100, 200, 255, 0.3);
+  padding: 6px 12px;
   border-radius: 20px;
   font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
+  font-weight: 600;
+  letter-spacing: 1px;
 }
 
 /* Vet Grid */
@@ -425,13 +440,15 @@ body {
 }
 
 .btn-primary {
-  background: #fff;
-  color: #000;
+  background: linear-gradient(135deg, var(--accent), #9452ff);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(94, 106, 210, 0.4);
 }
 
 .btn-primary:hover {
-  background: #e0e0e0;
-  transform: scale(1.02);
+  background: linear-gradient(135deg, #6c7af3, #a975ff);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(94, 106, 210, 0.6);
 }
 
 .btn-ghost {
