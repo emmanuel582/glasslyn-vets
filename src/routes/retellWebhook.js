@@ -134,7 +134,7 @@ router.post('/inbound', (req, res) => {
     // DEBUG: Log the full raw body to understand Retell's exact payload structure
     logger.info(`[DEBUG] Raw Retell Inbound Webhook Payload:`, { rawPayload: JSON.stringify(body) });
 
-    const callObj = body.call || body;
+    const callObj = body.call_inbound || body.call || body;
     const from_number = callObj.from_number || body.from || body.caller_number || body.fromNumber || "unknown";
     const to_number = callObj.to_number || body.to || body.dialed_number || body.toNumber || "unknown";
     const call_id = callObj.call_id || body.call_id || "unknown";
