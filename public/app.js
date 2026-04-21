@@ -3,7 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   
   // Data Fetching
-  refreshAllData();
+  fetchClinics().then(() => {
+    refreshAllData();
+  });
 
   // Polling for live updates every 15 seconds (keeps latest on top naturally)
   setInterval(() => {
@@ -43,6 +45,31 @@ function refreshAllData() {
   fetchVets();
 }
 
+let globalClinics = [];
+
+// ─── FETCH & RENDER: CLINICS ────────────────────────────
+async function fetchClinics() {
+  try {
+    const res = await fetch('/api/clinics');
+    globalClinics = await res.json();
+    
+    // Populate filters and dropdowns
+    const filterSelect = document.getElementById('vetClinicFilter');
+    const modalSelect = document.getElementById('vetClinicId');
+    if (filterSelect && modalSelect) {
+      filterSelect.innerHTML = '<option value="">All Clinics</option>';
+      modalSelect.innerHTML = '';
+      
+      globalClinics.forEach(c => {
+        filterSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+        modalSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+      });
+    }
+  } catch (err) {
+    console.error('Failed to fetch clinics', err);
+  }
+}
+
 // ─── FETCH & RENDER: CASES ──────────────────────────────
 async function fetchCases() {
   try {
@@ -56,6 +83,7 @@ async function fetchCases() {
       tr.innerHTML = `
         <td style="font-family: monospace; letter-spacing: 1px;">${c.id}</td>
         <td>${formatDate(c.created_at)}</td>
+        <td style="font-weight: 500; color: white;">${c.clinic_name || 'Glasslyn Vets'}</td>
         <td>${renderUrgency(c.urgency)}</td>
         <td style="text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">${c.status}</td>
         <td>${c.caller_name || c.caller_phone}</td>
@@ -135,7 +163,12 @@ async function fetchCallers() {
 // ─── FETCH & RENDER: VETS ─────────────────────────────
 async function fetchVets() {
   try {
-    const res = await fetch('/api/vets');
+    const filter = document.getElementById('vetClinicFilter');
+    let url = '/api/vets';
+    if (filter && filter.value) {
+      url += '?clinic_id=' + filter.value;
+    }
+    const res = await fetch(url);
     const vets = await res.json();
     const grid = document.getElementById('vetsGrid');
     grid.innerHTML = '';
@@ -143,8 +176,10 @@ async function fetchVets() {
     vets.forEach(v => {
       const card = document.createElement('div');
       card.className = 'glass-panel vet-card';
+      const clinicDisplay = v.clinic_name ? `<div style="font-size: 11px; margin-bottom: 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 1px;">${v.clinic_name}</div>` : '';
       card.innerHTML = `
         <div class="vet-level">Level ${v.level_order}</div>
+        ${clinicDisplay}
         <h3>${v.name}</h3>
         <p>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -153,7 +188,7 @@ async function fetchVets() {
           ${v.phone}
         </p>
         <div class="vet-actions">
-          <button class="btn btn-ghost" onclick="editVet(${v.id}, '${v.name.replace(/'/g, "\\'")}', '${v.phone}', ${v.level_order})">Edit</button>
+          <button class="btn btn-ghost" onclick="editVet(${v.id}, '${v.name.replace(/'/g, "\\'")}', '${v.phone}', ${v.level_order}, ${v.clinic_id})">Edit</button>
           <button class="btn btn-danger" onclick="deleteVet(${v.id})">Remove</button>
         </div>
       `;
@@ -168,6 +203,10 @@ async function fetchVets() {
 function openVetModal() {
   document.getElementById('vetForm').reset();
   document.getElementById('vetId').value = '';
+  const filter = document.getElementById('vetClinicFilter');
+  if (filter && filter.value) {
+    document.getElementById('vetClinicId').value = filter.value;
+  }
   document.getElementById('modalTitle').innerText = 'Add Veterinarian';
   document.getElementById('vetModalOverlay').classList.add('active');
 }
@@ -176,9 +215,10 @@ function closeVetModal() {
   document.getElementById('vetModalOverlay').classList.remove('active');
 }
 
-function editVet(id, name, phone, level) {
+function editVet(id, name, phone, level, clinicId) {
   document.getElementById('vetId').value = id;
   document.getElementById('vetName').value = name;
+  document.getElementById('vetClinicId').value = clinicId || globalClinics[0]?.id || 1;
   document.getElementById('vetPhone').value = phone;
   document.getElementById('vetLevel').value = level;
   document.getElementById('modalTitle').innerText = 'Edit Veterinarian';
@@ -191,7 +231,8 @@ async function handleVetSubmit(e) {
   const data = {
     name: document.getElementById('vetName').value,
     phone: document.getElementById('vetPhone').value,
-    level_order: parseInt(document.getElementById('vetLevel').value, 10)
+    level_order: parseInt(document.getElementById('vetLevel').value, 10),
+    clinic_id: parseInt(document.getElementById('vetClinicId').value, 10)
   };
 
   const method = id ? 'PUT' : 'POST';

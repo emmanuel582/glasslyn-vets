@@ -40,19 +40,30 @@ async function escalateCase(caseId) {
 
   // ── KEY CHANGE: Get vets for THIS clinic only ──
   const clinicId = caseData.clinic_id || 1;
-  const clinicVets = db.getVetsByClinic(clinicId);
+  let clinicVets = db.getVetsByClinic(clinicId);
 
   // Resolve clinic name for notifications
   const clinic = db.getClinicById(clinicId);
   const clinicName = clinic ? clinic.name : 'Glasslyn Vets';
   const clinicDID = clinic ? clinic.did : config.retell.fromNumber;
 
+  // FALLBACK: Use Clinic 1 vets if current clinic has no vets
+  if (clinicVets.length === 0 && clinicId !== 1) {
+    logger.warn(`No vets configured for clinic ${clinicId} (${clinicName}). Falling back to default Clinic 1 vets.`);
+    clinicVets = db.getVetsByClinic(1);
+    db.addAuditLog(caseId, 'escalation_fallback', {
+      originalClinicId: clinicId,
+      originalClinicName: clinicName,
+      message: 'Falling back to default Clinic 1 vets because no vets were assigned to this clinic.'
+    });
+  }
+
   if (clinicVets.length === 0) {
-    logger.error(`No vets configured for clinic ${clinicId} (${clinicName}). Cannot escalate case ${caseId}.`);
+    logger.error(`No vets configured for clinic ${clinicId} (${clinicName}) and fallback failed. Cannot escalate case ${caseId}.`);
     db.addAuditLog(caseId, 'no_vets_for_clinic', {
       clinicId,
       clinicName,
-      message: 'No vets assigned to this clinic.',
+      message: 'No vets assigned to this clinic or globally.',
     });
     db.updateCase(caseId, { status: 'closed' });
     return;
