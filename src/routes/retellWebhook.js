@@ -130,10 +130,16 @@ function handleCallAnalyzed(call) {
 router.post('/inbound', (req, res) => {
   try {
     const body = req.body || {};
-    const callObj = body.call || body;
-    const { from_number, to_number, call_id } = callObj;
+    
+    // DEBUG: Log the full raw body to understand Retell's exact payload structure
+    logger.info(`[DEBUG] Raw Retell Inbound Webhook Payload:`, { rawPayload: JSON.stringify(body) });
 
-    logger.info(`Retell inbound webhook received`, { from_number, to_number, call_id });
+    const callObj = body.call || body;
+    const from_number = callObj.from_number || body.from || body.caller_number || body.fromNumber || "unknown";
+    const to_number = callObj.to_number || body.to || body.dialed_number || body.toNumber || "unknown";
+    const call_id = callObj.call_id || body.call_id || "unknown";
+
+    logger.info(`Retell inbound webhook extracted values`, { from_number, to_number, call_id });
 
     // Look up which clinic this DID belongs to
     const clinic = db.findClinicByDID(normalisePhone(to_number));
