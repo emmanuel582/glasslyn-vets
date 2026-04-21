@@ -129,7 +129,9 @@ function handleCallAnalyzed(call) {
  */
 router.post('/inbound', (req, res) => {
   try {
-    const { from_number, to_number, call_id } = req.body;
+    const body = req.body || {};
+    const callObj = body.call || body;
+    const { from_number, to_number, call_id } = callObj;
 
     logger.info(`Retell inbound webhook received`, { from_number, to_number, call_id });
 
