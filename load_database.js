@@ -14,15 +14,15 @@ try {
   `);
 
   const tx = db.transaction(() => {
-    insertClinic.run(1, 'Glasslyn Main', '+353000000000'); // Fallback number for Main if none provided
-    insertClinic.run(2, 'Glasslyn Southside', '+353212296063');
-    insertClinic.run(3, 'Glasslyn Northside', '+353212296062');
-    insertClinic.run(4, 'Glasslyn West', '+3532955925');
+    insertClinic.run(1, 'Glasslyn Vets Bandon', '+3532955835');
+    insertClinic.run(2, 'Muskery Vets', '+353212296063');
+    insertClinic.run(3, 'Carbery Vets', '+353212296062');
+    insertClinic.run(4, 'Glasslyn Vets Kinsale', '+3532955930');
     
-    // Auto-migrate stranded older vets to Clinic 1 (Glasslyn Main)
+    // Auto-migrate stranded older vets to Clinic 1 (Glasslyn Vets Bandon)
     const info = db.prepare(`UPDATE vets SET clinic_id = 1 WHERE clinic_id IS NULL`).run();
     if (info.changes > 0) {
-      console.log(`Auto-migrated ${info.changes} unassigned legacy Vets directly to Glasslyn Main (Clinic 1).`);
+      console.log(`Auto-migrated ${info.changes} unassigned legacy Vets directly to Glasslyn Vets Bandon (Clinic 1).`);
     }
   });
 

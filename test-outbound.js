@@ -1,29 +1,35 @@
-const { validateConfig } = require('./src/config');
+require('dotenv').config();
 const { initRetell, callVetNotification } = require('./src/services/retellService');
+const logger = require('./src/utils/logger');
 
-// Validate environment variables using the app's standard configuration loader
-validateConfig();
+async function testOutbound() {
+  const targetNumber = process.argv[2];
+  
+  if (!targetNumber) {
+    console.error('Usage: node test-outbound.js <phone-number>');
+    process.exit(1);
+  }
 
-async function testCall() {
   try {
-    // Initialise Retell client using app config
     initRetell();
     
-    const testNumber = '+2348123328628';
+    console.log(`Starting test outbound call to: ${targetNumber}`);
     
-    console.log(`Setting up outbound test call to ${testNumber} ...`);
+    // Simulate an escalation call
+    // (vetPhone, vetName, caseId, clinicName, clinicDID)
+    const fromNumber = process.argv[3] || null;
+    const result = await callVetNotification(
+      targetNumber, 
+      'Test Doctor', 
+      'test-case-1234', 
+      'Glasslyn Vets Test Clinic', 
+      fromNumber
+    );
     
-    // callVetNotification(vetPhone, vetName, caseId)
-    const response = await callVetNotification(testNumber, 'Test Vet (Manual Script)', 'TEST-CASE-001');
-    
-    console.log("Call successfully initiated!");
-    console.log("Call ID:", response.call_id);
-    console.log("Call details:", JSON.stringify(response, null, 2));
-    
-  } catch (error) {
-    console.error("\nFailed to make the test call.");
-    console.error(error);
+    console.log('Outbound call successful! Result:', result);
+  } catch (err) {
+    console.error('Outbound call failed:', err);
   }
 }
 
-testCall();
+testOutbound();

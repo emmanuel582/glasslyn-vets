@@ -158,6 +158,16 @@ function runMigrations() {
     );
     CREATE INDEX IF NOT EXISTS idx_clinics_did ON clinics(did);
   `);
+
+  // Migration: Correct known clinic spelling that affects TTS pronunciation.
+  const clinicRenameInfo = db.prepare(`
+    UPDATE clinics
+    SET name = REPLACE(name, 'Muskerry', 'Muskery')
+    WHERE name LIKE '%Muskerry%'
+  `).run();
+  if (clinicRenameInfo.changes > 0) {
+    logger.info(`Migration: Renamed ${clinicRenameInfo.changes} clinic record(s) from Muskerry to Muskery`);
+  }
 }
 
 /**
