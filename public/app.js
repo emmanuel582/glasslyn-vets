@@ -43,9 +43,11 @@ function refreshAllData() {
   fetchLogs();
   fetchCallers();
   fetchVets();
+  fetchVetProfiles();
 }
 
 let globalClinics = [];
+let globalVetProfiles = [];
 
 // ─── FETCH & RENDER: CLINICS ────────────────────────────
 async function fetchClinics() {
@@ -188,7 +190,7 @@ async function fetchVets() {
           ${v.phone}
         </p>
         <div class="vet-actions">
-          <button class="btn btn-ghost" onclick="editVet(${v.id}, '${v.name.replace(/'/g, "\\'")}', '${v.phone}', ${v.level_order}, ${v.clinic_id})">Edit</button>
+          <button class="btn btn-ghost" onclick="editVet(${v.id}, '${v.name.replace(/'/g, "\\'")}', '${v.phone}', ${v.level_order}, ${v.clinic_id}, ${v.vet_profile_id})">Edit</button>
           <button class="btn btn-danger" onclick="deleteVet(${v.id})">Remove</button>
         </div>
       `;
@@ -215,8 +217,9 @@ function closeVetModal() {
   document.getElementById('vetModalOverlay').classList.remove('active');
 }
 
-function editVet(id, name, phone, level, clinicId) {
+function editVet(id, name, phone, level, clinicId, profileId) {
   document.getElementById('vetId').value = id;
+  document.getElementById('vetProfileId').value = profileId || '';
   document.getElementById('vetName').value = name;
   document.getElementById('vetClinicId').value = clinicId || globalClinics[0]?.id || 1;
   document.getElementById('vetPhone').value = phone;
@@ -228,11 +231,13 @@ function editVet(id, name, phone, level, clinicId) {
 async function handleVetSubmit(e) {
   e.preventDefault();
   const id = document.getElementById('vetId').value;
+  const profileId = document.getElementById('vetProfileId').value;
   const data = {
     name: document.getElementById('vetName').value,
     phone: document.getElementById('vetPhone').value,
     level_order: parseInt(document.getElementById('vetLevel').value, 10),
-    clinic_id: parseInt(document.getElementById('vetClinicId').value, 10)
+    clinic_id: parseInt(document.getElementById('vetClinicId').value, 10),
+    vet_profile_id: profileId ? parseInt(profileId, 10) : null
   };
 
   const method = id ? 'PUT' : 'POST';
@@ -406,3 +411,125 @@ function renderUrgency(urgency) {
     return '<span class="badge-normal" style="opacity:0.5">PENDING</span>';
   }
 }
+
+// ─── VET PROFILES ─────────────────────────────────────
+async function fetchVetProfiles() {
+  try {
+    const res = await fetch('/api/vet-profiles');
+    globalVetProfiles = await res.json();
+    const select = document.getElementById('vetProfileId');
+    if (select) {
+      const currentVal = select.value;
+      select.innerHTML = '<option value="">-- Select Vet --</option>';
+      globalVetProfiles.forEach(p => {
+        select.innerHTML += `<option value="${p.id}" data-name="${p.name.replace(/"/g, '&quot;')}" data-phone="${p.phone}">${p.name}</option>`;
+      });
+      select.value = currentVal;
+    }
+    
+    const poolTbody = document.querySelector('#vetPoolTable tbody');
+    if (poolTbody) {
+      poolTbody.innerHTML = '';
+      globalVetProfiles.forEach(p => {
+        poolTbody.innerHTML += `
+          <tr>
+            <td>${p.name}</td>
+            <td>${p.phone}</td>
+            <td>
+              <button class="btn btn-danger" onclick="deleteVetProfile(${p.id})">Delete</button>
+            </td>
+          </tr>
+        `;
+      });
+    }
+  } catch (err) {
+    console.error('Failed to fetch vet profiles', err);
+  }
+}
+
+function populateVetFromProfile() {
+  const select = document.getElementById('vetProfileId');
+  if (!select.value) return;
+  const option = select.options[select.selectedIndex];
+  document.getElementById('vetName').value = option.dataset.name;
+  document.getElementById('vetPhone').value = option.dataset.phone;
+}
+
+window.openVetPoolModal = function() {
+  document.getElementById('vetProfileForm').reset();
+  document.getElementById('profileId').value = '';
+  document.getElementById('vetPoolModalOverlay').classList.add('active');
+  fetchVetProfiles();
+};
+
+window.closeVetPoolModal = function() {
+  document.getElementById('vetPoolModalOverlay').classList.remove('active');
+  fetchVetProfiles(); 
+};
+
+document.getElementById('vetProfileForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('profileId').value;
+  const name = document.getElementById('profileName').value;
+  const phone = document.getElementById('profilePhone').value;
+  const method = id ? 'PUT' : 'POST';
+  const url = id ? '/api/vet-profiles/' + id : '/api/vet-profiles';
+  try {
+    await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, phone })
+    });
+    document.getElementById('vetProfileForm').reset();
+    document.getElementById('profileId').value = '';
+    fetchVetProfiles();
+    fetchVets(); 
+  } catch (err) {
+    alert('Error saving profile');
+  }
+});
+
+window.deleteVetProfile = async function(id) {
+  if (!confirm('Delete this saved vet? This will also remove them from rosters if used.')) return;
+  try {
+    await fetch('/api/vet-profiles/' + id, { method: 'DELETE' });
+    fetchVetProfiles();
+    fetchVets();
+  } catch (err) {
+    alert('Error deleting profile');
+  }
+};
+
+// ─── CSV OPERATIONS ─────────────────────────────────────
+window.uploadCSV = async function() {
+  const fileInput = document.getElementById('csvFileInput');
+  if (!fileInput.files.length) return;
+  const file = fileInput.files[0];
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/api/callers/csv-upload', {
+      method: 'POST',
+      body: formData
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    const data = await res.json();
+    alert(`Successfully uploaded ${data.count} callers!`);
+    fetchCallers();
+  } catch (err) {
+    alert('Failed to upload CSV: ' + err.message);
+  }
+  fileInput.value = '';
+};
+
+window.clearCSVData = async function() {
+  if (!confirm('Are you sure you want to clear all caller data?')) return;
+  try {
+    const res = await fetch('/api/callers/clear', { method: 'DELETE' });
+    if (!res.ok) throw new Error('Clear failed');
+    fetchCallers();
+  } catch (err) {
+    alert('Failed to clear data: ' + err.message);
+  }
+};

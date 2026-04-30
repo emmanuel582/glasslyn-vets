@@ -141,6 +141,15 @@ router.post('/inbound', (req, res) => {
 
     logger.info(`Retell inbound webhook extracted values`, { from_number, to_number, call_id });
 
+    // Look up caller
+    const caller = db.findCallerByPhone(normalisePhone(from_number));
+    let caller_name = "Unknown";
+    let caller_found = "false";
+    if (caller && caller.name) {
+      caller_name = caller.name;
+      caller_found = "true";
+    }
+
     // Look up which clinic this DID belongs to
     const clinic = db.findClinicByDID(normalisePhone(to_number));
     
@@ -157,6 +166,8 @@ router.post('/inbound', (req, res) => {
       override_agent_id: config.retell.agentId,
       dynamic_variables: {
         caller_phone: from_number || "Unknown",
+        caller_name: caller_name,
+        caller_found: caller_found,
         clinic_id: clinic ? clinic.id.toString() : "1",
         clinic_name: clinic ? clinic.name : "Glasslyn Vets"
       }

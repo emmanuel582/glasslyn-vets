@@ -81,7 +81,14 @@ function initDatabase() {
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
       clinic_id INTEGER REFERENCES clinics(id),
-      level_order INTEGER NOT NULL
+      level_order INTEGER NOT NULL,
+      vet_profile_id INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS vet_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_clinics_did ON clinics(did);
@@ -168,6 +175,21 @@ function runMigrations() {
   if (clinicRenameInfo.changes > 0) {
     logger.info(`Migration: Renamed ${clinicRenameInfo.changes} clinic record(s) from Muskerry to Muskery`);
   }
+
+  // Migration: Add vet_profile_id to vets
+  if (!vetColumnNames.includes('vet_profile_id')) {
+    db.exec("ALTER TABLE vets ADD COLUMN vet_profile_id INTEGER");
+    logger.info('Migration: Added vet_profile_id column to vets table');
+  }
+
+  // Migration: Create vet_profiles table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vet_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL
+    );
+  `);
 }
 
 /**
@@ -315,6 +337,14 @@ function upsertCaller(phone, name, eircode) {
   }
 }
 
+/**
+ * Clear all callers.
+ */
+function clearCallers() {
+  getDb().prepare('DELETE FROM callers').run();
+  return true;
+}
+
 // ─── Case Queries ─────────────────────────────────────
 
 /**
@@ -434,15 +464,15 @@ function getVetsByClinic(clinicId) {
   `).all(clinicId);
 }
 
-function addVet(name, phone, level_order, clinic_id) {
+function addVet(name, phone, level_order, clinic_id, vet_profile_id) {
   const result = getDb().prepare(
-    'INSERT INTO vets (name, phone, level_order, clinic_id) VALUES (?, ?, ?, ?)'
-  ).run(name, phone, level_order, clinic_id || null);
-  return { id: result.lastInsertRowid, name, phone, level_order, clinic_id };
+    'INSERT INTO vets (name, phone, level_order, clinic_id, vet_profile_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(name, phone, level_order, clinic_id || null, vet_profile_id || null);
+  return { id: result.lastInsertRowid, name, phone, level_order, clinic_id, vet_profile_id };
 }
 
 function updateVet(id, updates) {
-  const expected = ['name', 'phone', 'level_order', 'clinic_id'];
+  const expected = ['name', 'phone', 'level_order', 'clinic_id', 'vet_profile_id'];
   const clauses = [];
   const args = [];
   for (const k of expected) {
@@ -459,6 +489,29 @@ function updateVet(id, updates) {
 
 function deleteVet(id) {
   getDb().prepare('DELETE FROM vets WHERE id = ?').run(id);
+  return true;
+}
+
+// ─── Vet Profiles ─────────────────────────────────────
+
+function getAllVetProfiles() {
+  return getDb().prepare('SELECT * FROM vet_profiles ORDER BY name ASC').all();
+}
+
+function addVetProfile(name, phone) {
+  const result = getDb().prepare('INSERT INTO vet_profiles (name, phone) VALUES (?, ?)').run(name, phone);
+  return { id: result.lastInsertRowid, name, phone };
+}
+
+function updateVetProfile(id, name, phone) {
+  getDb().prepare('UPDATE vet_profiles SET name = ?, phone = ? WHERE id = ?').run(name, phone, id);
+  // Also update any vets in the roster that use this profile
+  getDb().prepare('UPDATE vets SET name = ?, phone = ? WHERE vet_profile_id = ?').run(name, phone, id);
+  return true;
+}
+
+function deleteVetProfile(id) {
+  getDb().prepare('DELETE FROM vet_profiles WHERE id = ?').run(id);
   return true;
 }
 
@@ -503,6 +556,7 @@ module.exports = {
   // Callers
   findCallerByPhone,
   upsertCaller,
+  clearCallers,
   // Cases
   createCase,
   getCaseById,
@@ -515,6 +569,11 @@ module.exports = {
   addVet,
   updateVet,
   deleteVet,
+  // Vet Profiles
+  getAllVetProfiles,
+  addVetProfile,
+  updateVetProfile,
+  deleteVetProfile,
   // Audit
   addAuditLog,
   getAuditLog,

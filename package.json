@@ -9,13 +9,16 @@
   },
   "dependencies": {
     "@wppconnect-team/wppconnect": "^1.31.0",
-    "retell-sdk": "^4.0.0",
-    "express": "^4.21.0",
+    "axios": "^1.7.0",
     "better-sqlite3": "^11.7.0",
+    "csv-parser": "^3.2.0",
     "dotenv": "^16.4.7",
-    "winston": "^3.17.0",
+    "express": "^4.21.0",
+    "express-basic-auth": "^1.2.1",
+    "multer": "^2.1.1",
+    "retell-sdk": "^4.0.0",
     "uuid": "^11.0.0",
-    "axios": "^1.7.0"
+    "winston": "^3.17.0"
   },
   "engines": {
     "node": ">=18.10.0"

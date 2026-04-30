@@ -1,6 +1,11 @@
 const express = require('express');
+const multer = require('multer');
+const csv = require('csv-parser');
+const fs = require('fs');
 const db = require('../database');
 const router = express.Router();
+
+const upload = multer({ dest: 'tmp/' });
 
 // ============================================
 // Clinics
@@ -57,11 +62,11 @@ router.get('/vets', (req, res) => {
 
 router.post('/vets', (req, res) => {
   try {
-    const { name, phone, level_order, clinic_id } = req.body;
+    const { name, phone, level_order, clinic_id, vet_profile_id } = req.body;
     if (!name || !phone || typeof level_order === 'undefined') {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    const newVet = db.addVet(name, phone, level_order, clinic_id);
+    const newVet = db.addVet(name, phone, level_order, clinic_id, vet_profile_id);
     res.json(newVet);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -89,6 +94,46 @@ router.delete('/vets/:id', (req, res) => {
 });
 
 // ============================================
+// Vet Profiles
+// ============================================
+router.get('/vet-profiles', (req, res) => {
+  try {
+    res.json(db.getAllVetProfiles());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/vet-profiles', (req, res) => {
+  try {
+    const { name, phone } = req.body;
+    if (!name || !phone) return res.status(400).json({ error: 'Missing name or phone' });
+    res.json(db.addVetProfile(name, phone));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/vet-profiles/:id', (req, res) => {
+  try {
+    const { name, phone } = req.body;
+    db.updateVetProfile(req.params.id, name, phone);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/vet-profiles/:id', (req, res) => {
+  try {
+    db.deleteVetProfile(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // Cases
 // ============================================
 router.get('/cases', (req, res) => {
@@ -106,7 +151,7 @@ router.get('/cases', (req, res) => {
 });
 
 // ============================================
-// Callers
+// Callers & CSV
 // ============================================
 router.get('/callers', (req, res) => {
   try {
@@ -115,6 +160,38 @@ router.get('/callers', (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+router.delete('/callers/clear', (req, res) => {
+  try {
+    db.clearCallers();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/callers/csv-upload', upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  const results = [];
+  fs.createReadStream(req.file.path)
+    .pipe(csv())
+    .on('data', (data) => results.push(data))
+    .on('end', () => {
+      // Look for phone, name, address/eircode columns
+      results.forEach(row => {
+        let name = row.Name || row.name || row.CustomerName || row.customerName || '';
+        let phone = row.Phone || row.phone || row.PhoneNumber || row.phoneNumber || '';
+        let address = row.Address || row.address || row.Eircode || row.eircode || '';
+        if (phone) {
+          db.upsertCaller(phone, name, address);
+        }
+      });
+      fs.unlinkSync(req.file.path); // remove temp file
+      res.json({ success: true, count: results.length });
+    });
 });
 
 // ============================================

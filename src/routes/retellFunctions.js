@@ -135,6 +135,17 @@ function handleSaveCaseDetails(args, callId) {
   const whatsappPhone = whatsapp_number ? normalisePhone(whatsapp_number) : normalisePhone(phone);
   const parsedClinicId = parseInt(clinic_id, 10);
 
+  // Overwrite name and eircode from CSV/database if the caller exists
+  const existingCaller = db.findCallerByPhone(normalisePhone(phone));
+  let finalName = name || null;
+  let finalEircode = eircode || null;
+  
+  if (existingCaller) {
+    finalName = existingCaller.name || finalName;
+    finalEircode = existingCaller.eircode || finalEircode;
+    logger.info('Caller found in CSV, using database name and eircode', { finalName, finalEircode });
+  }
+
   logger.info('Saving case details', {
     callerPhone: normalisePhone(phone),
     whatsappPhone,
@@ -145,8 +156,8 @@ function handleSaveCaseDetails(args, callId) {
   const newCase = caseService.openCase({
     callerPhone: normalisePhone(phone),
     callerWhatsapp: whatsappPhone,
-    callerName: name || null,
-    eircode: eircode || null,
+    callerName: finalName,
+    eircode: finalEircode,
     issueDescription: issue_description || null,
     urgency: 'pending',
     retellCallId: callId,

@@ -22,11 +22,28 @@ const apiRouter = require('./routes/api');
 // ─── Validate Config ──────────────────────────────────
 validateConfig();
 
+const basicAuth = require('express-basic-auth');
+
 // ─── Express App ──────────────────────────────────────
 const app = express();
 
 // Parse JSON bodies
 app.use(express.json({ limit: '5mb' }));
+
+// Secure the portal with basic auth (but NOT webhooks)
+const authMiddleware = basicAuth({
+  users: { 'admin': 'admin123' },
+  challenge: true,
+  realm: 'Glasslyn Vets AI Receptionist',
+});
+
+// Apply auth conditionally
+app.use((req, res, next) => {
+  if (req.path.startsWith('/retell') || req.path.startsWith('/whatsapp') || req.path === '/health') {
+    return next();
+  }
+  return authMiddleware(req, res, next);
+});
 
 // Serve static frontend dashboard
 app.use(express.static(path.join(__dirname, '..', 'public')));

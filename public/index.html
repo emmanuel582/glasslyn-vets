@@ -130,14 +130,16 @@
         <header class="section-header with-actions">
           <div>
             <h2>On-Call Roster</h2>
-            <p>Manage the escalation hierarchy per clinic. If a clinic has no vets, Clinic 1 (Main) vets are used as fallback.</p>
+            <p>Manage the escalation hierarchy per clinic. If a clinic has no vets, Clinic 1 (Main) vets are used as
+              fallback.</p>
           </div>
           <div style="display: flex; gap: 10px; align-items: center;">
             <select id="vetClinicFilter" class="glass-select" onchange="fetchVets()">
               <option value="">All Clinics</option>
               <!-- Injected by JS -->
             </select>
-            <button class="btn btn-primary" onclick="openVetModal()">+ Add Veterinarian</button>
+            <button class="btn btn-ghost" onclick="openVetPoolModal()">Manage Saved Vets</button>
+            <button class="btn btn-primary" onclick="openVetModal()">+ Add Vet to Roster</button>
           </div>
         </header>
         <div class="vet-grid" id="vetsGrid">
@@ -147,9 +149,16 @@
 
       <!-- TAB: CALLERS -->
       <section id="tab-callers" class="tab-content">
-        <header class="section-header">
-          <h2>Client CRM</h2>
-          <p>Database of all unique callers processed by the system.</p>
+        <header class="section-header with-actions">
+          <div>
+            <h2>Client CRM</h2>
+            <p>Database of all unique callers processed by the system.</p>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="uploadCSV()">
+            <button class="btn btn-ghost" onclick="document.getElementById('csvFileInput').click()">Upload CSV</button>
+            <button class="btn btn-danger" onclick="clearCSVData()">Clear Data</button>
+          </div>
         </header>
         <div class="glass-panel datagrid-container">
           <table class="datagrid" id="callersTable">
@@ -183,6 +192,13 @@
         <form id="vetForm">
           <input type="hidden" id="vetId">
           <div class="form-group">
+            <label>Select Saved Veterinarian</label>
+            <select id="vetProfileId" required onchange="populateVetFromProfile()">
+              <option value="">-- Select Vet --</option>
+              <!-- Injected by JS -->
+            </select>
+          </div>
+          <div class="form-group" style="display:none;">
             <label>Full Name</label>
             <input type="text" id="vetName" placeholder="Dr. Sarah O'Connor" required>
           </div>
@@ -192,7 +208,7 @@
               <!-- Injected by JS -->
             </select>
           </div>
-          <div class="form-group">
+          <div class="form-group" style="display:none;">
             <label>Phone Number (Mobile for WhatsApp)</label>
             <input type="text" id="vetPhone" placeholder="35385xxxxxxx" required>
           </div>
@@ -205,6 +221,40 @@
             <button type="submit" class="btn btn-primary">Save Changes</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- VET POOL MODAL -->
+  <div class="modal-overlay" id="vetPoolModalOverlay">
+    <div class="glass-panel modal modal-lg">
+      <div class="modal-header">
+        <h3>Manage Saved Veterinarians</h3>
+        <button class="close-btn" onclick="closeVetPoolModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="vetProfileForm" style="display:flex; gap:10px; margin-bottom:20px;">
+          <input type="hidden" id="profileId">
+          <input type="text" id="profileName" placeholder="Name" required
+            style="flex:1; padding: 10px; border-radius: 8px;">
+          <input type="text" id="profilePhone" placeholder="Phone" required
+            style="flex:1; padding: 10px; border-radius: 8px;">
+          <button type="submit" class="btn btn-primary" id="saveProfileBtn">Add Vet</button>
+        </form>
+        <div class="datagrid-container" style="max-height: 300px; overflow-y: auto;">
+          <table class="datagrid" id="vetPoolTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Injected -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
