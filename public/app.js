@@ -85,7 +85,7 @@ async function fetchCases() {
       tr.innerHTML = `
         <td style="font-family: monospace; letter-spacing: 1px;">${c.id}</td>
         <td>${formatDate(c.created_at)}</td>
-        <td style="font-weight: 500; color: white;">${c.clinic_name || 'Glasslyn Vets'}</td>
+        <td style="font-weight: 500; color: var(--text-main);">${c.clinic_name || 'Glasslyn Vets'}</td>
         <td>${renderUrgency(c.urgency)}</td>
         <td style="text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">${c.status}</td>
         <td>${c.caller_name || c.caller_phone}</td>
@@ -123,7 +123,7 @@ async function fetchLogs() {
         <td style="width: 150px; font-family: monospace;">${l.case_id || '-'}</td>
         <td style="width: 150px;">${l.caller_name || '-'}</td>
         <td style="width: 200px;">
-          <span style="background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase;">
+          <span style="background: rgba(0,0,0,0.05); padding: 4px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; color: var(--text-main);">
             ${l.event_type.replace(/_/g, ' ')}
           </span>
         </td>

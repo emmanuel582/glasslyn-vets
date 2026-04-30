@@ -23,7 +23,8 @@
             "description": "The caller's phone number from the call metadata"
           }
         },
-        "required": ["phone"]
+        "required": ["phone"],
+        "additionalProperties": false
       }
     },
     {
@@ -64,7 +65,8 @@
             "description": "The clinic ID from the dynamic variable {{clinic_id}}."
           }
         },
-        "required": ["name", "phone", "whatsapp_number", "issue_description", "clinic_id"]
+        "required": ["name", "phone", "whatsapp_number", "eircode", "issue_description", "clinic_id"],
+        "additionalProperties": false
       }
     },
     {
@@ -89,7 +91,8 @@
             "description": "The case ID returned from save_case_details"
           }
         },
-        "required": ["issue_description"]
+        "required": ["issue_description", "case_id"],
+        "additionalProperties": false
       }
     },
     {
@@ -109,7 +112,8 @@
             "type": "string"
           }
         },
-        "required": ["case_id"]
+        "required": ["case_id"],
+        "additionalProperties": false
       }
     },
     {
@@ -129,7 +133,8 @@
             "type": "string"
           }
         },
-        "required": ["case_id"]
+        "required": ["case_id"],
+        "additionalProperties": false
       }
     },
     {
