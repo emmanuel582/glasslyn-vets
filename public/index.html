@@ -141,11 +141,11 @@
           </div>
         </header>
 
-        <div class="calendar-container glass-panel" style="margin-bottom: 30px;">
-          <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-             <button class="btn btn-ghost" onclick="changeMonth(-1)">&#8592; Prev</button>
-             <h3 id="currentMonthLabel"></h3>
-             <button class="btn btn-ghost" onclick="changeMonth(1)">Next &#8594;</button>
+        <div class="calendar-container glass-panel" style="max-width: 750px; margin: 0 auto 40px auto; padding: 20px;">
+          <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+             <button class="btn btn-ghost" style="padding: 6px 12px; font-size: 12px;" onclick="changeMonth(-1)">&#8592; Prev</button>
+             <h3 id="currentMonthLabel" style="font-size: 18px; font-weight: 600;"></h3>
+             <button class="btn btn-ghost" style="padding: 6px 12px; font-size: 12px;" onclick="changeMonth(1)">Next &#8594;</button>
           </div>
           <div id="calendarGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px;">
              <!-- Injected by JS -->
