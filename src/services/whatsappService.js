@@ -103,6 +103,10 @@ async function sendMessage(phone, message) {
     return result;
   } catch (err) {
     logger.error(`Failed to send WhatsApp message`, { to: chatId, error: err.message });
+    if (err.message && err.message.includes('detached Frame')) {
+      logger.error('WhatsApp detached frame error detected. Forcing process exit for PM2 self-healing.');
+      setTimeout(() => process.exit(1), 1000); // Give time for logs to flush before PM2 restarts
+    }
     throw err;
   }
 }
