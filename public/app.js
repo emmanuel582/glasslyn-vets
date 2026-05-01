@@ -258,16 +258,16 @@ window.renderCalendar = async function() {
     
     let content = '';
     shiftsForDay.forEach(s => {
-      content += `<div style="font-size:10px; background:rgba(0,0,0,0.1); border-radius:4px; padding:2px 4px; margin-top:2px; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Level ${s.level_order}: ${s.name}">L${s.level_order}: ${s.name}</div>`;
+      content += `<div style="font-size:9px; font-weight:600; background:rgba(0,102,255,0.1); border:1px solid rgba(0,102,255,0.2); border-radius:4px; padding:2px 4px; margin-top:4px; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Level ${s.level_order}: ${s.name}">L${s.level_order}: ${s.name.split(' ')[0]}</div>`;
     });
 
     const isToday = new Date().toISOString().split('T')[0] === dateStr;
-    const bg = isToday ? 'var(--card-bg-hover)' : 'transparent';
-    const border = isToday ? '1px solid var(--accent)' : '1px solid rgba(0,0,0,0.05)';
+    const bg = isToday ? 'rgba(0,102,255,0.05)' : 'rgba(255,255,255,0.4)';
+    const border = isToday ? '2px solid var(--accent)' : '1px solid var(--glass-border)';
 
     grid.innerHTML += `
-      <div onclick="openRotaModal('${dateStr}')" style="background:${bg}; border:${border}; border-radius:6px; padding:6px; min-height:60px; cursor:pointer; transition:all 0.2s;">
-        <div style="font-size:12px; font-weight:bold; margin-bottom:4px; color:var(--text-muted);">${day}</div>
+      <div onclick="openRotaModal('${dateStr}')" class="calendar-day" style="background:${bg}; border:${border}; border-radius:8px; padding:8px; min-height:65px; display:flex; flex-direction:column; cursor:pointer; transition:all 0.2s; box-shadow: 0 2px 10px rgba(0,0,0,0.02);">
+        <div style="font-size:12px; font-weight:700; color:var(--text-main);">${day}</div>
         ${content}
       </div>
     `;

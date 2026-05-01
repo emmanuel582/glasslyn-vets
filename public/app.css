@@ -232,6 +232,22 @@ body {
   transition: opacity 0.4s ease, transform 0.4s ease;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+/* Hide scrollbar for tab-content to keep it clean */
+.tab-content::-webkit-scrollbar {
+  width: 8px;
+}
+.tab-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tab-content::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 4px;
+}
+.tab-content::-webkit-scrollbar-thumb:hover {
+  background: var(--glass-highlight);
 }
 
 .tab-content.active {
