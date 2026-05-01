@@ -141,13 +141,13 @@ async function sendCaseToVet(vetPhone, caseData, clinicNameParam) {
  */
 async function notifyCallerAccepted(callerPhone, caseData, eta, clinicNameParam) {
   const clinicName = clinicNameParam || 'Glasslyn Vets';
-  
+
   // Try to find the clinic to get its phone number for the message, if we can't find it, fallback
   let clinicPhoneStr = 'the clinic';
   if (caseData.clinic_id) {
     const db = require('../database');
     const clinic = db.getClinicById(caseData.clinic_id);
-    if(clinic && clinic.did) {
+    if (clinic && clinic.did) {
       clinicPhoneStr = clinic.did;
     }
   }
@@ -162,7 +162,6 @@ async function notifyCallerAccepted(callerPhone, caseData, eta, clinicNameParam)
     `A vet has accepted your case and is on the way.\n\n` +
     `📋 *Case ID:* ${caseData.id}\n` +
     `📍 *Estimated arrival:* ${etaText}\n\n` +
-    `If you need to reach us, please call ${clinicPhoneStr}.\n\n` +
     `— ${clinicName}`;
 
   return await sendMessage(callerPhone, message);

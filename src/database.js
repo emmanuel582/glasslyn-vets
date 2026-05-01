@@ -96,6 +96,15 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
     CREATE INDEX IF NOT EXISTS idx_cases_caller_phone ON cases(caller_phone);
     CREATE INDEX IF NOT EXISTS idx_audit_case_id ON audit_log(case_id);
+
+    CREATE TABLE IF NOT EXISTS vet_shifts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shift_date TEXT NOT NULL,
+      clinic_id INTEGER NOT NULL,
+      level_order INTEGER NOT NULL,
+      vet_profile_id INTEGER NOT NULL,
+      UNIQUE(shift_date, clinic_id, level_order)
+    );
   `);
 
   // ─── Migrations ─────────────────────────────────────
@@ -188,6 +197,18 @@ function runMigrations() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       phone TEXT NOT NULL
+    );
+  `);
+
+  // Migration: Create vet_shifts table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS vet_shifts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shift_date TEXT NOT NULL,
+      clinic_id INTEGER NOT NULL,
+      level_order INTEGER NOT NULL,
+      vet_profile_id INTEGER NOT NULL,
+      UNIQUE(shift_date, clinic_id, level_order)
     );
   `);
 }
@@ -452,9 +473,25 @@ function getAllVets() {
 
 /**
  * Get vets for a specific clinic, ordered by escalation priority.
- * This is the key function for multi-clinic routing.
+ * Checks for a specific rota for today (YYYY-MM-DD). If found, uses it.
+ * Otherwise, falls back to the default vets table.
  */
 function getVetsByClinic(clinicId) {
+  const today = new Date().toISOString().split('T')[0];
+  const shifts = getDb().prepare(`
+    SELECT vet_shifts.id as shift_id, vet_shifts.level_order, vet_profiles.name, vet_profiles.phone, clinics.name as clinic_name, vet_shifts.vet_profile_id
+    FROM vet_shifts
+    JOIN vet_profiles ON vet_shifts.vet_profile_id = vet_profiles.id
+    LEFT JOIN clinics ON vet_shifts.clinic_id = clinics.id
+    WHERE vet_shifts.clinic_id = ? AND vet_shifts.shift_date = ?
+    ORDER BY vet_shifts.level_order ASC
+  `).all(clinicId, today);
+
+  if (shifts && shifts.length > 0) {
+    return shifts;
+  }
+
+  // Fallback to static vets
   return getDb().prepare(`
     SELECT vets.*, clinics.name as clinic_name
     FROM vets
@@ -512,6 +549,34 @@ function updateVetProfile(id, name, phone) {
 
 function deleteVetProfile(id) {
   getDb().prepare('DELETE FROM vet_profiles WHERE id = ?').run(id);
+  return true;
+}
+
+// ─── Vet Shifts ───────────────────────────────────────
+
+function getVetShifts(clinicId, monthPrefix) {
+  return getDb().prepare(`
+    SELECT vet_shifts.*, vet_profiles.name, vet_profiles.phone 
+    FROM vet_shifts
+    JOIN vet_profiles ON vet_shifts.vet_profile_id = vet_profiles.id
+    WHERE clinic_id = ? AND shift_date LIKE ?
+    ORDER BY shift_date ASC, level_order ASC
+  `).all(clinicId, `${monthPrefix}%`);
+}
+
+function upsertVetShift(shift_date, clinic_id, level_order, vet_profile_id) {
+  getDb().prepare(`
+    INSERT INTO vet_shifts (shift_date, clinic_id, level_order, vet_profile_id)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(shift_date, clinic_id, level_order) DO UPDATE SET vet_profile_id = excluded.vet_profile_id
+  `).run(shift_date, clinic_id, level_order, vet_profile_id);
+  return true;
+}
+
+function deleteVetShift(shift_date, clinic_id, level_order) {
+  getDb().prepare(`
+    DELETE FROM vet_shifts WHERE shift_date = ? AND clinic_id = ? AND level_order = ?
+  `).run(shift_date, clinic_id, level_order);
   return true;
 }
 
@@ -574,6 +639,10 @@ module.exports = {
   addVetProfile,
   updateVetProfile,
   deleteVetProfile,
+  // Vet Shifts
+  getVetShifts,
+  upsertVetShift,
+  deleteVetShift,
   // Audit
   addAuditLog,
   getAuditLog,

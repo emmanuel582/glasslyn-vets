@@ -1,3 +1,4 @@
+let currentDate = new Date();
 document.addEventListener('DOMContentLoaded', () => {
   // Navigation Defaults
   initTabs();
@@ -14,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Setup Vet Form
   document.getElementById('vetForm').addEventListener('submit', handleVetSubmit);
+  document.getElementById('rotaForm')?.addEventListener('submit', handleRotaSubmit);
 
   // Make all datagrids sortable
   makeTableSortable('casesTable');
@@ -44,6 +46,7 @@ function refreshAllData() {
   fetchCallers();
   fetchVets();
   fetchVetProfiles();
+  renderCalendar();
 }
 
 let globalClinics = [];
@@ -59,13 +62,14 @@ async function fetchClinics() {
     const filterSelect = document.getElementById('vetClinicFilter');
     const modalSelect = document.getElementById('vetClinicId');
     if (filterSelect && modalSelect) {
-      filterSelect.innerHTML = '<option value="">All Clinics</option>';
+      filterSelect.innerHTML = '';
       modalSelect.innerHTML = '';
       
       globalClinics.forEach(c => {
         filterSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
         modalSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
       });
+      renderCalendar();
     }
   } catch (err) {
     console.error('Failed to fetch clinics', err);
@@ -198,6 +202,140 @@ async function fetchVets() {
     });
   } catch (err) {
     console.error('Failed to fetch vets', err);
+  }
+}
+
+// ─── CALENDAR ROTA ─────────────────────────────────────
+let monthlyShifts = [];
+
+async function fetchMonthlyShifts() {
+  const clinicId = document.getElementById('vetClinicFilter')?.value;
+  if (!clinicId) return;
+  const year = currentDate.getFullYear();
+  const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+  try {
+    const res = await fetch(`/api/vet-shifts?clinic_id=${clinicId}&month=${year}-${month}`);
+    monthlyShifts = await res.json();
+  } catch(err) {
+    console.error(err);
+  }
+}
+
+window.changeMonth = function(delta) {
+  currentDate.setMonth(currentDate.getMonth() + delta);
+  renderCalendar();
+};
+
+window.renderCalendar = async function() {
+  await fetchMonthlyShifts();
+  const grid = document.getElementById('calendarGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  const monthName = currentDate.toLocaleString('default', { month: 'long' });
+  document.getElementById('currentMonthLabel').innerText = `${monthName} ${year}`;
+
+  const firstDay = new Date(year, month, 1).getDay(); // 0 (Sun) to 6 (Sat)
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Day headers
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  dayNames.forEach(d => {
+    grid.innerHTML += `<div style="text-align:center; font-size:11px; font-weight:600; color:var(--text-muted); padding:5px;">${d}</div>`;
+  });
+
+  // Empty cells for offset
+  for (let i = 0; i < firstDay; i++) {
+    grid.innerHTML += `<div></div>`;
+  }
+
+  // Days
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const shiftsForDay = monthlyShifts.filter(s => s.shift_date === dateStr);
+    
+    let content = '';
+    shiftsForDay.forEach(s => {
+      content += `<div style="font-size:10px; background:rgba(0,0,0,0.1); border-radius:4px; padding:2px 4px; margin-top:2px; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Level ${s.level_order}: ${s.name}">L${s.level_order}: ${s.name}</div>`;
+    });
+
+    const isToday = new Date().toISOString().split('T')[0] === dateStr;
+    const bg = isToday ? 'var(--card-bg-hover)' : 'transparent';
+    const border = isToday ? '1px solid var(--accent)' : '1px solid rgba(0,0,0,0.05)';
+
+    grid.innerHTML += `
+      <div onclick="openRotaModal('${dateStr}')" style="background:${bg}; border:${border}; border-radius:6px; padding:6px; min-height:60px; cursor:pointer; transition:all 0.2s;">
+        <div style="font-size:12px; font-weight:bold; margin-bottom:4px; color:var(--text-muted);">${day}</div>
+        ${content}
+      </div>
+    `;
+  }
+};
+
+window.openRotaModal = function(dateStr) {
+  const clinicId = document.getElementById('vetClinicFilter')?.value;
+  if (!clinicId) {
+    alert('Please select a specific clinic first to manage its calendar.');
+    return;
+  }
+
+  document.getElementById('rotaDate').value = dateStr;
+  document.getElementById('rotaModalTitle').innerText = 'Assign Vets for ' + dateStr;
+  
+  // reset
+  document.getElementById('rotaLevel1').value = '';
+  document.getElementById('rotaLevel2').value = '';
+
+  const shiftsForDay = monthlyShifts.filter(s => s.shift_date === dateStr);
+  const l1 = shiftsForDay.find(s => s.level_order === 1);
+  const l2 = shiftsForDay.find(s => s.level_order === 2);
+
+  if (l1) document.getElementById('rotaLevel1').value = l1.vet_profile_id;
+  if (l2) document.getElementById('rotaLevel2').value = l2.vet_profile_id;
+
+  document.getElementById('rotaModalOverlay').classList.add('active');
+};
+
+window.closeRotaModal = function() {
+  document.getElementById('rotaModalOverlay').classList.remove('active');
+};
+
+async function handleRotaSubmit(e) {
+  e.preventDefault();
+  const clinicId = document.getElementById('vetClinicFilter').value;
+  const dateStr = document.getElementById('rotaDate').value;
+  const l1 = document.getElementById('rotaLevel1').value;
+  const l2 = document.getElementById('rotaLevel2').value;
+
+  const updates = [];
+  if (l1) updates.push({ shift_date: dateStr, clinic_id: clinicId, level_order: 1, vet_profile_id: l1 });
+  else updates.push({ _delete: true, shift_date: dateStr, clinic_id: clinicId, level_order: 1 });
+
+  if (l2) updates.push({ shift_date: dateStr, clinic_id: clinicId, level_order: 2, vet_profile_id: l2 });
+  else updates.push({ _delete: true, shift_date: dateStr, clinic_id: clinicId, level_order: 2 });
+
+  try {
+    for (const update of updates) {
+      if (update._delete) {
+        await fetch('/api/vet-shifts', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(update)
+        });
+      } else {
+        await fetch('/api/vet-shifts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(update)
+        });
+      }
+    }
+    closeRotaModal();
+    renderCalendar();
+  } catch(err) {
+    alert('Failed to save rota: ' + err.message);
   }
 }
 
@@ -425,6 +563,22 @@ async function fetchVetProfiles() {
         select.innerHTML += `<option value="${p.id}" data-name="${p.name.replace(/"/g, '&quot;')}" data-phone="${p.phone}">${p.name}</option>`;
       });
       select.value = currentVal;
+    }
+
+    const rota1 = document.getElementById('rotaLevel1');
+    const rota2 = document.getElementById('rotaLevel2');
+    if (rota1 && rota2) {
+      const r1Val = rota1.value;
+      const r2Val = rota2.value;
+      rota1.innerHTML = '<option value="">-- None (use fallback) --</option>';
+      rota2.innerHTML = '<option value="">-- None (use fallback) --</option>';
+      globalVetProfiles.forEach(p => {
+        const opt = `<option value="${p.id}">${p.name}</option>`;
+        rota1.innerHTML += opt;
+        rota2.innerHTML += opt;
+      });
+      rota1.value = r1Val;
+      rota2.value = r2Val;
     }
     
     const poolTbody = document.querySelector('#vetPoolTable tbody');

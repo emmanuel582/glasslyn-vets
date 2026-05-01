@@ -129,19 +129,31 @@
       <section id="tab-vets" class="tab-content">
         <header class="section-header with-actions">
           <div>
-            <h2>On-Call Roster</h2>
-            <p>Manage the escalation hierarchy per clinic. If a clinic has no vets, Clinic 1 (Main) vets are used as
-              fallback.</p>
+            <h2>On-Call Roster & Calendar</h2>
+            <p>Manage the daily escalation calendar per clinic. Vets placed here override the default fallback roster.</p>
           </div>
           <div style="display: flex; gap: 10px; align-items: center;">
-            <select id="vetClinicFilter" class="glass-select" onchange="fetchVets()">
-              <option value="">All Clinics</option>
+            <select id="vetClinicFilter" class="glass-select" onchange="fetchVets(); renderCalendar();">
               <!-- Injected by JS -->
             </select>
             <button class="btn btn-ghost" onclick="openVetPoolModal()">Manage Saved Vets</button>
-            <button class="btn btn-primary" onclick="openVetModal()">+ Add Vet to Roster</button>
+            <button class="btn btn-primary" onclick="openVetModal()">+ Add Fallback Vet</button>
           </div>
         </header>
+
+        <div class="calendar-container glass-panel" style="margin-bottom: 30px;">
+          <div class="calendar-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+             <button class="btn btn-ghost" onclick="changeMonth(-1)">&#8592; Prev</button>
+             <h3 id="currentMonthLabel"></h3>
+             <button class="btn btn-ghost" onclick="changeMonth(1)">Next &#8594;</button>
+          </div>
+          <div id="calendarGrid" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px;">
+             <!-- Injected by JS -->
+          </div>
+        </div>
+
+        <h3 style="margin-bottom: 15px;">Default Fallback Roster</h3>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">These vets are called if the calendar is empty for today.</p>
         <div class="vet-grid" id="vetsGrid">
           <!-- Injected by JS -->
         </div>
@@ -268,6 +280,37 @@
       </div>
       <div class="modal-body" id="detailsBody">
         <!-- Injected -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ROTA MODAL -->
+  <div class="modal-overlay" id="rotaModalOverlay">
+    <div class="glass-panel modal">
+      <div class="modal-header">
+        <h3 id="rotaModalTitle">Assign Vets for Date</h3>
+        <button class="close-btn" onclick="closeRotaModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="rotaForm">
+          <input type="hidden" id="rotaDate">
+          <div class="form-group">
+            <label>Level 1 Vet</label>
+            <select id="rotaLevel1">
+              <option value="">-- None (use fallback) --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Level 2 Vet</label>
+            <select id="rotaLevel2">
+              <option value="">-- None (use fallback) --</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeRotaModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

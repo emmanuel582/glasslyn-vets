@@ -134,6 +134,42 @@ router.delete('/vet-profiles/:id', (req, res) => {
 });
 
 // ============================================
+// Vet Shifts
+// ============================================
+router.get('/vet-shifts', (req, res) => {
+  try {
+    const { clinic_id, month } = req.query;
+    if (!clinic_id || !month) return res.status(400).json({ error: 'Missing clinic_id or month (YYYY-MM)' });
+    res.json(db.getVetShifts(clinic_id, month));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/vet-shifts', (req, res) => {
+  try {
+    const { shift_date, clinic_id, level_order, vet_profile_id } = req.body;
+    if (!shift_date || !clinic_id || !level_order || !vet_profile_id) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    db.upsertVetShift(shift_date, clinic_id, level_order, vet_profile_id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/vet-shifts', (req, res) => {
+  try {
+    const { shift_date, clinic_id, level_order } = req.body;
+    db.deleteVetShift(shift_date, clinic_id, level_order);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // Cases
 // ============================================
 router.get('/cases', (req, res) => {

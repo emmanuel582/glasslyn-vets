@@ -132,7 +132,8 @@ function handleSaveCaseDetails(args, callId) {
 
   // If the caller provided a separate WhatsApp number, use it.
   // Otherwise, their calling phone IS their WhatsApp number.
-  const whatsappPhone = whatsapp_number ? normalisePhone(whatsapp_number) : normalisePhone(phone);
+  let whatsappPhone = whatsapp_number ? normalisePhone(whatsapp_number) : normalisePhone(phone);
+  if (whatsappPhone === 'OnFile') whatsappPhone = normalisePhone(phone);
   const parsedClinicId = parseInt(clinic_id, 10);
 
   // Overwrite name and eircode from CSV/database if the caller exists
@@ -145,6 +146,9 @@ function handleSaveCaseDetails(args, callId) {
     finalEircode = existingCaller.eircode || finalEircode;
     logger.info('Caller found in CSV, using database name and eircode', { finalName, finalEircode });
   }
+
+  if (finalName === 'On File' || finalName === 'OnFile') finalName = 'Unknown';
+  if (finalEircode === 'On File' || finalEircode === 'OnFile') finalEircode = 'Unknown';
 
   logger.info('Saving case details', {
     callerPhone: normalisePhone(phone),

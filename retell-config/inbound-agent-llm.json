@@ -46,11 +46,11 @@
           },
           "phone": {
             "type": "string",
-            "description": "Caller's phone number"
+            "description": "Caller's phone number. YOU MUST pass the exact {{caller_phone}} here. DO NOT pass 'On File' for phone."
           },
           "whatsapp_number": {
             "type": "string",
-            "description": "The caller's WhatsApp phone number. If the caller confirmed their calling number IS their WhatsApp, pass the same number. If they provided a DIFFERENT WhatsApp number, pass that number here."
+            "description": "The caller's WhatsApp phone number. If the caller confirmed their calling number IS their WhatsApp, pass the same number. If they provided a DIFFERENT WhatsApp number, pass that number here. DO NOT pass 'On File'."
           },
           "eircode": {
             "type": "string",
