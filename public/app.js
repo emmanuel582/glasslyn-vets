@@ -282,7 +282,7 @@ window.openRotaModal = function(dateStr) {
   }
 
   document.getElementById('rotaDate').value = dateStr;
-  document.getElementById('rotaModalTitle').innerText = 'Assign Vets for ' + dateStr;
+  document.getElementById('rotaModalTitle').innerText = 'Assign Vets for ' + dateStr + ' (09:00 - 08:59 next day)';
   
   // reset
   document.getElementById('rotaLevel1').value = '';

@@ -477,7 +477,38 @@ function getAllVets() {
  * Otherwise, falls back to the default vets table.
  */
 function getVetsByClinic(clinicId) {
-  const today = new Date().toISOString().split('T')[0];
+  // A day runs from 09:00 to 08:59 the following morning.
+  // We offset the current time by 9 hours so that times before 09:00 map to the previous day's shift date.
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Dublin', 
+    year: 'numeric', 
+    month: 'numeric', 
+    day: 'numeric', 
+    hour: 'numeric', 
+    minute: 'numeric', 
+    second: 'numeric', 
+    hour12: false
+  }).formatToParts(now);
+
+  const getPart = (type) => parseInt(parts.find(p => p.type === type).value, 10);
+
+  const irelandWallClock = new Date(Date.UTC(
+    getPart('year'), 
+    getPart('month') - 1, 
+    getPart('day'), 
+    getPart('hour') === 24 ? 0 : getPart('hour'), 
+    getPart('minute'), 
+    getPart('second')
+  ));
+
+  const shiftDateObj = new Date(irelandWallClock.getTime() - 9 * 60 * 60 * 1000);
+
+  const year = shiftDateObj.getUTCFullYear();
+  const month = String(shiftDateObj.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(shiftDateObj.getUTCDate()).padStart(2, '0');
+  const shiftDateStr = `${year}-${month}-${day}`;
+
   const shifts = getDb().prepare(`
     SELECT vet_shifts.id as shift_id, vet_shifts.level_order, vet_profiles.name, vet_profiles.phone, clinics.name as clinic_name, vet_shifts.vet_profile_id
     FROM vet_shifts
@@ -485,7 +516,7 @@ function getVetsByClinic(clinicId) {
     LEFT JOIN clinics ON vet_shifts.clinic_id = clinics.id
     WHERE vet_shifts.clinic_id = ? AND vet_shifts.shift_date = ?
     ORDER BY vet_shifts.level_order ASC
-  `).all(clinicId, today);
+  `).all(clinicId, shiftDateStr);
 
   if (shifts && shifts.length > 0) {
     return shifts;
