@@ -150,8 +150,8 @@ async function speakVetNotification(callControlId, state) {
 
   await client.calls.actions.speak(callControlId, {
     payload: message,
-    voice: 'female',
-    language: 'en-GB',
+    voice: config.telnyx.voice,
+    language: config.telnyx.voiceLanguage,
     client_state: encodeClientState({ ...state, stage: 'speaking' }),
   });
 

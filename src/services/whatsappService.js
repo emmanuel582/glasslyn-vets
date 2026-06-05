@@ -12,6 +12,26 @@ const { toWhatsAppId } = require('../utils/helpers');
 let wppClient = null;
 let isReady = false;
 
+const WHATSAPP_BROWSER_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-features=MemorySaverMode',
+  '--memory-pressure-off',
+];
+
+const SEND_MAX_RETRIES = 3;
+const SEND_RETRY_DELAY_MS = 2000;
+
+function isDetachedFrameError(err) {
+  const message = err?.message || '';
+  return message.includes('detached Frame') || message.includes('detached frame');
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Initialise WPP Connect client.
  * Generates a QR code in the terminal for first-time auth.
@@ -27,16 +47,15 @@ async function initWhatsApp() {
         autoClose: 0, // Never auto-close (0 = disabled)
         headless: true,
         useChrome: true, // Use system Google Chrome installation
-        browserArgs: ['--no-sandbox', '--disable-setuid-sandbox'], // Fix for running as root on VPS
+        browserArgs: WHATSAPP_BROWSER_ARGS,
         logQR: true, // Print QR code in terminal
         updatesLog: false,
         catchQR: (base64Qr, asciiQR) => {
-          // QR code is printed in the terminal by logQR
           logger.info('╔════════════════════════════════════════╗');
           logger.info('║  SCAN THIS QR CODE WITH WHATSAPP       ║');
           logger.info('║  Open WhatsApp > Linked Devices > Link ║');
           logger.info('╚════════════════════════════════════════╝');
-          console.log(asciiQR); // Print ASCII QR to console
+          console.log(asciiQR);
         },
         statusFind: (statusSession, session) => {
           logger.info(`WPP Connect status: ${statusSession}`, { session });
@@ -47,7 +66,6 @@ async function initWhatsApp() {
         isReady = true;
         logger.info('WPP Connect client is READY');
 
-        // Handle disconnection
         client.onStateChange((state) => {
           logger.info(`WhatsApp state changed: ${state}`);
           if (state === 'CONFLICT' || state === 'UNLAUNCHED') {
@@ -84,31 +102,57 @@ function isWhatsAppReady() {
 }
 
 /**
- * Send a text message via WhatsApp.
- * @param {string} phone - Phone number (digits only, e.g. "353871234567")
- * @param {string} message - Message text
+ * Send a text message via WhatsApp (single attempt).
  */
-async function sendMessage(phone, message) {
+async function sendMessageOnce(phone, message) {
   if (!isWhatsAppReady()) {
-    logger.error('WhatsApp is not ready. Cannot send message.', { phone });
     throw new Error('WhatsApp is not connected. Please scan the QR code.');
   }
 
   const chatId = toWhatsAppId(phone);
+  const result = await wppClient.sendText(chatId, message);
+  logger.info('WhatsApp message sent successfully', { to: chatId, messageId: result.id });
+  return result;
+}
+
+/**
+ * Send a text message via WhatsApp with retry on transient Puppeteer frame errors.
+ * @param {string} phone - Phone number (digits only, e.g. "353871234567")
+ * @param {string} message - Message text
+ */
+async function sendMessage(phone, message) {
+  const chatId = toWhatsAppId(phone);
   logger.info(`Sending WhatsApp message to ${chatId}`);
 
-  try {
-    const result = await wppClient.sendText(chatId, message);
-    logger.info(`WhatsApp message sent successfully`, { to: chatId, messageId: result.id });
-    return result;
-  } catch (err) {
-    logger.error(`Failed to send WhatsApp message`, { to: chatId, error: err.message });
-    if (err.message && err.message.includes('detached Frame')) {
-      logger.error('WhatsApp detached frame error detected. Forcing process exit for PM2 self-healing.');
-      setTimeout(() => process.exit(1), 1000); // Give time for logs to flush before PM2 restarts
+  let lastError;
+
+  for (let attempt = 1; attempt <= SEND_MAX_RETRIES; attempt++) {
+    try {
+      return await sendMessageOnce(phone, message);
+    } catch (err) {
+      lastError = err;
+      logger.error('Failed to send WhatsApp message', {
+        to: chatId,
+        attempt,
+        error: err.message,
+      });
+
+      if (isDetachedFrameError(err) && attempt < SEND_MAX_RETRIES) {
+        logger.warn(`WhatsApp detached frame — retrying (${attempt}/${SEND_MAX_RETRIES})`);
+        await delay(SEND_RETRY_DELAY_MS * attempt);
+        continue;
+      }
+
+      break;
     }
-    throw err;
   }
+
+  if (isDetachedFrameError(lastError)) {
+    logger.error('WhatsApp detached frame persisted after retries. Restarting process for PM2 recovery.');
+    setTimeout(() => process.exit(1), 1000);
+  }
+
+  throw lastError;
 }
 
 /**
@@ -118,7 +162,6 @@ async function sendMessage(phone, message) {
 async function sendCaseToVet(vetPhone, caseData, clinicNameParam) {
   const clinicName = clinicNameParam || 'Glasslyn Vets';
 
-  // Use the WhatsApp number if available, otherwise fall back to caller_phone
   const callerContactPhone = caseData.caller_whatsapp || caseData.caller_phone;
 
   const message =
@@ -145,16 +188,6 @@ async function sendCaseToVet(vetPhone, caseData, clinicNameParam) {
  */
 async function notifyCallerAccepted(callerPhone, caseData, eta, clinicNameParam) {
   const clinicName = clinicNameParam || 'Glasslyn Vets';
-
-  // Try to find the clinic to get its phone number for the message, if we can't find it, fallback
-  let clinicPhoneStr = 'the clinic';
-  if (caseData.clinic_id) {
-    const db = require('../database');
-    const clinic = db.getClinicById(caseData.clinic_id);
-    if (clinic && clinic.did) {
-      clinicPhoneStr = clinic.did;
-    }
-  }
 
   const etaText = eta === 'within_1_hour'
     ? 'within 1 hour'
@@ -211,7 +244,6 @@ function onMessage(handler) {
   }
 
   wppClient.onMessage((message) => {
-    // Only process individual (non-group) messages
     if (!message.isGroupMsg) {
       handler(message);
     }

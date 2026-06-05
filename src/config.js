@@ -22,6 +22,8 @@ const config = {
     connectionId: process.env.TELNYX_CONNECTION_ID || '',
     fromNumber: process.env.TELNYX_FROM_NUMBER || '',
     amd: process.env.TELNYX_AMD || 'detect_beep',
+    voice: process.env.TELNYX_VOICE || 'Telnyx.NaturalHD.astra',
+    voiceLanguage: process.env.TELNYX_VOICE_LANGUAGE || 'en-GB',
   },
 
   // --- WPP Connect (WhatsApp) ---
