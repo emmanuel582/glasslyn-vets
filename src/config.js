@@ -16,6 +16,14 @@ const config = {
     webhookSecret: process.env.RETELL_WEBHOOK_SECRET || '',
   },
 
+  // --- Telnyx (outbound vet notification calls) ---
+  telnyx: {
+    apiKey: process.env.TELNYX_API_KEY || '',
+    connectionId: process.env.TELNYX_CONNECTION_ID || '',
+    fromNumber: process.env.TELNYX_FROM_NUMBER || '',
+    amd: process.env.TELNYX_AMD || 'detect_beep',
+  },
+
   // --- WPP Connect (WhatsApp) ---
   whatsapp: {
     sessionName: process.env.WPP_SESSION_NAME || 'glasslyn-vets',
@@ -67,8 +75,11 @@ function validateConfig() {
 
   if (!config.retell.apiKey) missing.push('RETELL_API_KEY');
   if (!config.retell.agentId) missing.push('RETELL_AGENT_ID');
-  if (!config.retell.outboundAgentId) missing.push('RETELL_OUTBOUND_AGENT_ID');
   if (!config.retell.fromNumber) missing.push('RETELL_FROM_NUMBER');
+
+  if (!config.telnyx.apiKey) missing.push('TELNYX_API_KEY');
+  if (!config.telnyx.connectionId) missing.push('TELNYX_CONNECTION_ID');
+  if (!config.telnyx.fromNumber) missing.push('TELNYX_FROM_NUMBER');
 
   if (config.clinics.length === 0) {
     console.warn('[CONFIG] WARNING: No clinics configured. At least CLINIC_1_NAME and CLINIC_1_DID are required.');

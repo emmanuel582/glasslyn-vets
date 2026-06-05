@@ -10,12 +10,14 @@ const { config, validateConfig } = require('./config');
 const logger = require('./utils/logger');
 const { initDatabase, closeDatabase } = require('./database');
 const { initRetell } = require('./services/retellService');
+const { initTelnyx } = require('./services/telnyxService');
 const whatsappService = require('./services/whatsappService');
 const { normalisePhone } = require('./utils/helpers');
 
 // Import routes
 const retellWebhookRouter = require('./routes/retellWebhook');
 const retellFunctionsRouter = require('./routes/retellFunctions');
+const telnyxWebhookRouter = require('./routes/telnyxWebhook');
 const whatsappWebhookRouter = require('./routes/whatsappWebhook');
 const apiRouter = require('./routes/api');
 
@@ -39,7 +41,7 @@ const authMiddleware = basicAuth({
 
 // Apply auth conditionally
 app.use((req, res, next) => {
-  if (req.path.startsWith('/retell') || req.path.startsWith('/whatsapp') || req.path === '/health') {
+  if (req.path.startsWith('/retell') || req.path.startsWith('/telnyx') || req.path.startsWith('/whatsapp') || req.path === '/health') {
     return next();
   }
   return authMiddleware(req, res, next);
@@ -77,6 +79,9 @@ app.use('/retell/webhook', retellWebhookRouter);
 // Retell AI custom functions (called during live calls)
 app.use('/retell/functions', retellFunctionsRouter);
 
+// Telnyx webhooks (outbound vet notification call control)
+app.use('/telnyx/webhook', telnyxWebhookRouter);
+
 // WhatsApp incoming message webhook (internal)
 app.use('/whatsapp/webhook', whatsappWebhookRouter);
 
@@ -102,23 +107,28 @@ async function startServer() {
   logger.info('╚════════════════════════════════════════════╝');
 
   // Step 1: Initialise database
-  logger.info('Step 1/3: Initialising database...');
+  logger.info('Step 1/4: Initialising database...');
   initDatabase();
 
-  // Step 2: Initialise Retell AI client
-  logger.info('Step 2/3: Initialising Retell AI...');
+  // Step 2: Initialise Retell AI client (inbound)
+  logger.info('Step 2/4: Initialising Retell AI...');
   initRetell();
 
-  // Step 3: Start Express server first (so health check works)
+  // Step 3: Initialise Telnyx client (outbound vet notifications)
+  logger.info('Step 3/4: Initialising Telnyx...');
+  initTelnyx();
+
+  // Step 4: Start Express server first (so health check works)
   const server = app.listen(config.server.port, () => {
     logger.info(`Server running on port ${config.server.port}`);
     logger.info(`Health check: http://localhost:${config.server.port}/health`);
     logger.info(`Retell webhook URL: ${config.server.baseUrl}/retell/webhook`);
     logger.info(`Retell functions URL: ${config.server.baseUrl}/retell/functions`);
+    logger.info(`Telnyx webhook URL: ${config.server.baseUrl}/telnyx/webhook`);
   });
 
-  // Step 4: Initialise WPP Connect (WhatsApp)
-  logger.info('Step 3/3: Initialising WhatsApp (WPP Connect)...');
+  // Step 5: Initialise WPP Connect (WhatsApp)
+  logger.info('Step 4/4: Initialising WhatsApp (WPP Connect)...');
   logger.info('If this is the first time, a QR code will appear below.');
   logger.info('Scan it with WhatsApp to link this device.');
 
@@ -183,6 +193,7 @@ async function startServer() {
     logger.info(`  Health:     GET  ${config.server.baseUrl}/health`);
     logger.info(`  Webhook:    POST ${config.server.baseUrl}/retell/webhook`);
     logger.info(`  Functions:  POST ${config.server.baseUrl}/retell/functions`);
+    logger.info(`  Telnyx:     POST ${config.server.baseUrl}/telnyx/webhook`);
     logger.info('════════════════════════════════════════════');
     logger.info('');
     logger.info('Configure these URLs in your Retell dashboard:');
@@ -191,6 +202,8 @@ async function startServer() {
     logger.info(`  Custom Function URLs — set each function endpoint to:`);
     logger.info(`    ${config.server.baseUrl}/retell/functions`);
     logger.info('');
+    logger.info('Configure this URL in your Telnyx Voice API Application:');
+    logger.info(`  Webhook URL: ${config.server.baseUrl}/telnyx/webhook`);
   } catch (err) {
     logger.error('WhatsApp initialisation failed', { error: err.message });
     logger.warn('Server is running but WhatsApp is NOT connected.');

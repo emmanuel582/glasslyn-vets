@@ -10,7 +10,7 @@ const logger = require('../utils/logger');
 const { config } = require('../config');
 const caseService = require('./caseService');
 const whatsappService = require('./whatsappService');
-const retellService = require('./retellService');
+const telnyxService = require('./telnyxService');
 const db = require('../database');
 const { normalisePhone } = require('../utils/helpers');
 
@@ -109,7 +109,7 @@ async function escalateCase(caseId) {
   try {
     // Step 1: Make outbound call to vet — "Check your WhatsApp"
     try {
-      await retellService.callVetNotification(vet.phone, vet.name, caseId, clinicName, clinicDID);
+      await telnyxService.callVetNotification(vet.phone, vet.name, caseId, clinicName, clinicDID);
       db.addAuditLog(caseId, 'vet_call_initiated', {
         vetName: vet.name,
         vetPhone: vet.phone,
