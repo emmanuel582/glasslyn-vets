@@ -96,6 +96,15 @@ function validateConfig() {
     console.error('[CONFIG] Copy .env.example to .env and fill in your values.');
     process.exit(1);
   }
+
+  console.log(`[CONFIG] Telnyx outbound caller ID: ${config.telnyx.fromNumber}`);
+  console.log(`[CONFIG] Telnyx TTS voice: ${config.telnyx.voice} (${config.telnyx.voiceLanguage})`);
+
+  const fromDigits = config.telnyx.fromNumber.replace(/\D/g, '');
+  if (/^3538[3-9]/.test(fromDigits)) {
+    console.warn('[CONFIG] WARNING: TELNYX_FROM_NUMBER looks like an Irish mobile number.');
+    console.warn('[CONFIG] Use an Irish geographic/landline for outbound vet calls (ComReg CLI compliance).');
+  }
 }
 
 module.exports = { config, validateConfig };

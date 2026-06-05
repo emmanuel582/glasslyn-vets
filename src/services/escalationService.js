@@ -124,19 +124,39 @@ async function escalateCase(caseId) {
     }
 
     // Step 2: Send WhatsApp message with case details + response options
+    let whatsappSent = false;
     try {
       await whatsappService.sendCaseToVet(vet.phone, updatedCase, clinicName);
+      whatsappSent = true;
+    } catch (waErr) {
+      logger.warn(`WhatsApp message to vet failed — retrying once after 5s`, {
+        caseId,
+        error: waErr.message,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      try {
+        await whatsappService.sendCaseToVet(vet.phone, updatedCase, clinicName);
+        whatsappSent = true;
+        db.addAuditLog(caseId, 'whatsapp_sent_to_vet_retry', {
+          vetName: vet.name,
+          vetPhone: vet.phone,
+          clinicName,
+        });
+      } catch (retryErr) {
+        logger.error(`WhatsApp message to vet failed after retry`, {
+          caseId,
+          error: retryErr.message,
+        });
+        db.addAuditLog(caseId, 'whatsapp_send_failed', { error: retryErr.message });
+      }
+    }
+
+    if (whatsappSent) {
       db.addAuditLog(caseId, 'whatsapp_sent_to_vet', {
         vetName: vet.name,
         vetPhone: vet.phone,
         clinicName,
       });
-    } catch (waErr) {
-      logger.error(`WhatsApp message to vet failed`, {
-        caseId,
-        error: waErr.message,
-      });
-      db.addAuditLog(caseId, 'whatsapp_send_failed', { error: waErr.message });
     }
 
     // Step 3: Start failover timer

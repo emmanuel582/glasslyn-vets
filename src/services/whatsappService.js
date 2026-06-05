@@ -22,6 +22,8 @@ const WHATSAPP_BROWSER_ARGS = [
 
 const SEND_MAX_RETRIES = 3;
 const SEND_RETRY_DELAY_MS = 2000;
+const CONNECTED_WAIT_TIMEOUT_MS = 30000;
+const CONNECTED_POLL_INTERVAL_MS = 500;
 
 function isDetachedFrameError(err) {
   const message = err?.message || '';
@@ -30,6 +32,29 @@ function isDetachedFrameError(err) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wait until WPPConnect reports CONNECTED (or timeout).
+ * Avoids sending while WhatsApp Web iframes are still loading.
+ */
+async function waitForConnected(client) {
+  const deadline = Date.now() + CONNECTED_WAIT_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    try {
+      const state = await client.getConnectionState();
+      if (state === 'CONNECTED') {
+        return;
+      }
+      logger.info(`WhatsApp waiting for CONNECTED (current: ${state})`);
+    } catch (err) {
+      logger.warn('WhatsApp connection state check failed', { error: err.message });
+    }
+    await delay(CONNECTED_POLL_INTERVAL_MS);
+  }
+
+  logger.warn(`WhatsApp did not reach CONNECTED within ${CONNECTED_WAIT_TIMEOUT_MS / 1000}s — proceeding anyway`);
 }
 
 /**
@@ -61,14 +86,16 @@ async function initWhatsApp() {
           logger.info(`WPP Connect status: ${statusSession}`, { session });
         },
       })
-      .then((client) => {
+      .then(async (client) => {
         wppClient = client;
-        isReady = true;
-        logger.info('WPP Connect client is READY');
 
         client.onStateChange((state) => {
           logger.info(`WhatsApp state changed: ${state}`);
+          if (state === 'CONNECTED') {
+            isReady = true;
+          }
           if (state === 'CONFLICT' || state === 'UNLAUNCHED') {
+            isReady = false;
             logger.warn('WhatsApp session conflict detected. Restarting...');
             client.useHere();
           }
@@ -77,6 +104,10 @@ async function initWhatsApp() {
             logger.error('WhatsApp session unpaired. QR code scan required.');
           }
         });
+
+        await waitForConnected(client);
+        isReady = true;
+        logger.info('WPP Connect client is READY');
 
         resolve(client);
       })

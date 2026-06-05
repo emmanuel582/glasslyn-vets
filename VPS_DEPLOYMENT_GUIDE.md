@@ -132,3 +132,27 @@ You can access it from anywhere in the world by typing your VPS IP into your bro
 > Go to **Retell Dashboard** -> **Agent** and update your Custom Functions and Agent Webhook URLs to the direct public IP:
 > - Webhook: `http://187.124.55.32:3000/retell/webhook`
 > - Functions: `http://187.124.55.32:3000/retell/functions`
+
+---
+
+## Part 6: Deploy Client Outbound-Call Fixes
+
+After pulling code changes for landline caller ID, NaturalHD voice, and WhatsApp reliability:
+
+1. **Telnyx portal** — follow [`scripts/TELNYX_PORTAL_SETUP.md`](scripts/TELNYX_PORTAL_SETUP.md) to assign **+353216037774** to your Voice API Application.
+
+2. **On the VPS**, run the deploy script:
+   ```bash
+   cd ~/glasslyn-vets-ai   # or your app directory
+   bash scripts/deploy-production.sh
+   ```
+
+3. **Verify** in PM2 logs:
+   ```
+   [CONFIG] Telnyx outbound caller ID: +353216037774
+   [CONFIG] Telnyx TTS voice: Telnyx.NaturalHD.astra (en-GB)
+   ```
+
+4. Trigger a test escalation and confirm the vet's phone shows **+353216037774**.
+
+Client-facing summary: [`scripts/CLIENT_REPLY.md`](scripts/CLIENT_REPLY.md)
