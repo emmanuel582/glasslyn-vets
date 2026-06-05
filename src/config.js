@@ -24,6 +24,10 @@ const config = {
     amd: process.env.TELNYX_AMD || 'detect_beep',
     voice: process.env.TELNYX_VOICE || 'Telnyx.NaturalHD.astra',
     voiceLanguage: process.env.TELNYX_VOICE_LANGUAGE || 'en-GB',
+    callerIdMode: process.env.TELNYX_CALLER_ID_MODE || 'passthrough',
+    callerIdFallback: process.env.TELNYX_CALLER_ID_FALLBACK !== 'false',
+    dialMaxAttempts: parseInt(process.env.TELNYX_DIAL_MAX_ATTEMPTS, 10) || 2,
+    redialOnNoAnswer: process.env.TELNYX_REDIAL_ON_NO_ANSWER !== 'false',
   },
 
   // --- WPP Connect (WhatsApp) ---
@@ -98,6 +102,7 @@ function validateConfig() {
   }
 
   console.log(`[CONFIG] Telnyx outbound caller ID: ${config.telnyx.fromNumber}`);
+  console.log(`[CONFIG] Telnyx caller ID mode: ${config.telnyx.callerIdMode} (fallback: ${config.telnyx.callerIdFallback})`);
   console.log(`[CONFIG] Telnyx TTS voice: ${config.telnyx.voice} (${config.telnyx.voiceLanguage})`);
 
   const fromDigits = config.telnyx.fromNumber.replace(/\D/g, '');

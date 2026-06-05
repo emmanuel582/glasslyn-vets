@@ -2,6 +2,7 @@
 // Glasslyn Vets — Telnyx Service
 // ============================================
 // Outbound vet notification calls via Telnyx Call Control.
+// Supports dynamic caller ID passthrough (original caller) with landline fallback.
 
 const Telnyx = require('telnyx');
 const { config } = require('../config');
@@ -23,9 +24,6 @@ function initTelnyx() {
   return telnyxClient;
 }
 
-/**
- * Get the Telnyx client instance.
- */
 function getTelnyxClient() {
   if (!telnyxClient) {
     throw new Error('Telnyx client not initialised. Call initTelnyx() first.');
@@ -33,9 +31,6 @@ function getTelnyxClient() {
   return telnyxClient;
 }
 
-/**
- * Build the vet notification TTS script (matches Retell outbound agent prompt).
- */
 function buildVetNotificationMessage(vetName, caseId, clinicName) {
   const resolvedClinicName = clinicName || 'Glasslyn Vets';
   return (
@@ -46,17 +41,10 @@ function buildVetNotificationMessage(vetName, caseId, clinicName) {
   );
 }
 
-/**
- * Encode call context for Telnyx client_state (Base64 JSON).
- */
 function encodeClientState(data) {
   return Buffer.from(JSON.stringify(data)).toString('base64');
 }
 
-/**
- * Decode Telnyx client_state from webhook payload.
- * @returns {Object|null}
- */
 function decodeClientState(clientState) {
   if (!clientState) return null;
   try {
@@ -67,43 +55,65 @@ function decodeClientState(clientState) {
   }
 }
 
-/**
- * Check whether a webhook event belongs to a vet notification call.
- */
 function isVetNotificationState(state) {
   return state && (state.stage === VET_NOTIFICATION_STAGE || state.stage === 'speaking');
 }
 
+function isCallerIdRejectedError(err) {
+  const message = (err?.message || '').toLowerCase();
+  const body = JSON.stringify(err?.raw?.errors || err?.errors || err?.response?.data || '').toLowerCase();
+  return (
+    message.includes('403') ||
+    message.includes('invalid') ||
+    message.includes('caller') ||
+    body.includes('403') ||
+    body.includes('d35') ||
+    body.includes('origination')
+  );
+}
+
 /**
- * Make an outbound call to the vet to tell them to check WhatsApp.
- *
- * @param {string} vetPhone - Vet phone number
- * @param {string} vetName - Vet name for personalisation
- * @param {string} caseId - Case ID for context
- * @param {string} clinicName - Name of the clinic for the notification script
- * @param {string} _clinicDID - Unused; kept for call-site compatibility
- * @returns {Object} Telnyx dial response data
+ * Resolve outbound CLI for vet notification calls.
+ * @returns {{ fromNumber: string, callerIdSource: string, displayName?: string }}
  */
-async function callVetNotification(vetPhone, vetName, caseId, clinicName, _clinicDID) {
-  const client = getTelnyxClient();
-  const fromNumber = toE164(config.telnyx.fromNumber);
-  const toNumber = toE164(vetPhone);
-  const resolvedClinicName = clinicName || 'Glasslyn Vets';
+function resolveOutboundCallerId({ callerPhone, callerName, clinicDid }) {
+  const landline = toE164(config.telnyx.fromNumber);
+  const mode = config.telnyx.callerIdMode;
 
-  logger.info('Making outbound notification call to vet via Telnyx', {
-    vetName,
-    vetPhone: toNumber,
-    caseId,
-    clinicName: resolvedClinicName,
-    fromNumber,
-  });
+  if (mode === 'landline') {
+    return { fromNumber: landline, callerIdSource: 'landline' };
+  }
 
-  const clientState = encodeClientState({
+  if (mode === 'clinic' && clinicDid) {
+    return { fromNumber: toE164(clinicDid), callerIdSource: 'clinic' };
+  }
+
+  if (callerPhone && (mode === 'passthrough' || mode === 'auto')) {
+    const callerId = toE164(callerPhone);
+    return {
+      fromNumber: callerId,
+      callerIdSource: 'passthrough',
+      displayName: callerName || undefined,
+    };
+  }
+
+  return { fromNumber: landline, callerIdSource: 'landline' };
+}
+
+function buildClientState(baseState, fromNumber, callerIdSource, dialAttempt) {
+  return encodeClientState({
+    ...baseState,
     stage: VET_NOTIFICATION_STAGE,
-    vetName,
-    caseId,
-    clinicName: resolvedClinicName,
+    fromNumber,
+    callerIdSource,
+    dialAttempt,
+    delivered: false,
   });
+}
+
+async function dialVetCall({ vetPhone, fromNumber, displayName, clientState }) {
+  const client = getTelnyxClient();
+  const toNumber = toE164(vetPhone);
 
   const dialParams = {
     connection_id: config.telnyx.connectionId,
@@ -112,28 +122,118 @@ async function callVetNotification(vetPhone, vetName, caseId, clinicName, _clini
     client_state: clientState,
   };
 
+  if (displayName) {
+    dialParams.from_display_name = displayName.substring(0, 128);
+  }
+
   if (config.telnyx.amd) {
     dialParams.answering_machine_detection = config.telnyx.amd;
   }
 
-  try {
-    const response = await client.calls.dial(dialParams);
-    const data = response.data || response;
+  const response = await client.calls.dial(dialParams);
+  const data = response.data || response;
 
-    logger.info('Outbound Telnyx call initiated successfully', {
-      callControlId: data.call_control_id,
-      callSessionId: data.call_session_id,
-      vetPhone: toNumber,
-      caseId,
+  return {
+    call_control_id: data.call_control_id,
+    call_session_id: data.call_session_id,
+  };
+}
+
+/**
+ * Make an outbound call to the vet to tell them to check WhatsApp.
+ *
+ * @param {string} vetPhone
+ * @param {string} vetName
+ * @param {string} caseId
+ * @param {string} clinicName
+ * @param {Object} options
+ * @param {string} [options.callerPhone] - Original inbound caller for CLI passthrough
+ * @param {string} [options.callerName]
+ * @param {string} [options.clinicDid]
+ * @param {number} [options.dialAttempt]
+ */
+async function callVetNotification(vetPhone, vetName, caseId, clinicName, options = {}) {
+  const {
+    callerPhone,
+    callerName,
+    clinicDid,
+    dialAttempt = 1,
+  } = options;
+
+  const resolvedClinicName = clinicName || 'Glasslyn Vets';
+  const landline = toE164(config.telnyx.fromNumber);
+  const primary = resolveOutboundCallerId({ callerPhone, callerName, clinicDid });
+
+  const baseState = {
+    vetName,
+    vetPhone: toE164(vetPhone),
+    caseId,
+    clinicName: resolvedClinicName,
+    callerPhone: callerPhone ? toE164(callerPhone) : null,
+    callerName: callerName || null,
+    clinicDid: clinicDid ? toE164(clinicDid) : null,
+  };
+
+  logger.info('Making outbound notification call to vet via Telnyx', {
+    vetName,
+    vetPhone: toE164(vetPhone),
+    caseId,
+    clinicName: resolvedClinicName,
+    fromNumber: primary.fromNumber,
+    callerIdSource: primary.callerIdSource,
+    dialAttempt,
+  });
+
+  try {
+    const result = await dialVetCall({
+      vetPhone,
+      fromNumber: primary.fromNumber,
+      displayName: primary.displayName,
+      clientState: buildClientState(baseState, primary.fromNumber, primary.callerIdSource, dialAttempt),
     });
 
-    return {
-      call_control_id: data.call_control_id,
-      call_session_id: data.call_session_id,
-    };
+    logger.info('Outbound Telnyx call initiated successfully', {
+      ...result,
+      vetPhone: toE164(vetPhone),
+      caseId,
+      fromNumber: primary.fromNumber,
+      callerIdSource: primary.callerIdSource,
+    });
+
+    return result;
   } catch (err) {
+    const shouldFallback =
+      config.telnyx.callerIdFallback &&
+      primary.callerIdSource === 'passthrough' &&
+      primary.fromNumber !== landline &&
+      isCallerIdRejectedError(err);
+
+    if (shouldFallback) {
+      logger.warn('Telnyx rejected passthrough caller ID — retrying with landline fallback', {
+        caseId,
+        attemptedFrom: primary.fromNumber,
+        fallbackFrom: landline,
+        error: err.message,
+      });
+
+      const result = await dialVetCall({
+        vetPhone,
+        fromNumber: landline,
+        displayName: resolvedClinicName,
+        clientState: buildClientState(baseState, landline, 'landline_fallback', dialAttempt),
+      });
+
+      logger.info('Outbound Telnyx call initiated with landline fallback', {
+        ...result,
+        caseId,
+        fromNumber: landline,
+      });
+
+      return result;
+    }
+
     logger.error('Failed to make outbound Telnyx call to vet', {
-      vetPhone: toNumber,
+      vetPhone: toE164(vetPhone),
       caseId,
       error: err.message,
     });
@@ -142,8 +242,27 @@ async function callVetNotification(vetPhone, vetName, caseId, clinicName, _clini
 }
 
 /**
- * Speak the vet notification message on an active call leg.
+ * Redial a vet notification after trunk no-answer / busy (single retry per escalation step).
  */
+async function redialVetNotification(state) {
+  if (!state?.vetPhone || !state?.caseId) {
+    throw new Error('Missing vet call context for redial');
+  }
+
+  const nextAttempt = (state.dialAttempt || 1) + 1;
+  if (nextAttempt > config.telnyx.dialMaxAttempts) {
+    logger.warn('Telnyx vet call redial limit reached', { caseId: state.caseId, dialAttempt: nextAttempt });
+    return null;
+  }
+
+  return callVetNotification(state.vetPhone, state.vetName, state.caseId, state.clinicName, {
+    callerPhone: state.callerPhone,
+    callerName: state.callerName,
+    clinicDid: state.clinicDid,
+    dialAttempt: nextAttempt,
+  });
+}
+
 async function speakVetNotification(callControlId, state) {
   const client = getTelnyxClient();
   const message = buildVetNotificationMessage(state.vetName, state.caseId, state.clinicName);
@@ -152,7 +271,7 @@ async function speakVetNotification(callControlId, state) {
     payload: message,
     voice: config.telnyx.voice,
     language: config.telnyx.voiceLanguage,
-    client_state: encodeClientState({ ...state, stage: 'speaking' }),
+    client_state: encodeClientState({ ...state, stage: 'speaking', delivered: true }),
   });
 
   logger.info('Telnyx speak command sent for vet notification', {
@@ -161,23 +280,37 @@ async function speakVetNotification(callControlId, state) {
   });
 }
 
-/**
- * Hang up an active call leg.
- */
 async function hangupCall(callControlId) {
   const client = getTelnyxClient();
   await client.calls.actions.hangup(callControlId, {});
   logger.info('Telnyx hangup command sent', { callControlId });
 }
 
+/**
+ * Returns true if hangup cause indicates the vet never meaningfully answered.
+ */
+function isUnansweredHangup(payload) {
+  const cause = `${payload.hangup_cause || ''} ${payload.sip_hangup_cause || ''}`.toLowerCase();
+  return (
+    cause.includes('no_answer') ||
+    cause.includes('no answer') ||
+    cause.includes('busy') ||
+    cause.includes('unallocated') ||
+    cause.includes('rejected') ||
+    cause.includes('failed')
+  );
+}
+
 module.exports = {
   initTelnyx,
   getTelnyxClient,
   callVetNotification,
+  redialVetNotification,
   buildVetNotificationMessage,
   encodeClientState,
   decodeClientState,
   isVetNotificationState,
+  isUnansweredHangup,
   speakVetNotification,
   hangupCall,
   VET_NOTIFICATION_STAGE,

@@ -1,38 +1,39 @@
-# Client Update — Outbound Calls & WhatsApp (June 2026)
+# Client Update — Dynamic Outbound Calls (June 2026)
 
-Copy/adapt this message for the client.
+Copy/adapt for the client.
 
 ---
 
 Hi,
 
-Thanks for the test feedback. Here is what we found and what we have changed:
+We have implemented the additional complexity you described:
 
-**1. Caller ID on outbound vet calls**
+**1. Outbound call after inbound Retell session ends**
 
-The system cannot show the original caller's mobile number on outbound calls to vets. That is not supported by our Telnyx setup, and Irish telecom rules (ComReg CLI regulations) require the displayed number to be a number legitimately assigned to the calling service — not the pet owner's personal mobile.
+When an urgent case is escalated during a caller conversation, the system now **queues** the vet notification until Retell sends `call_ended`. Only then does it:
 
-We have switched the outbound caller ID to your Irish landline **+353216037774**, as requested. Vet notification calls will now display this landline instead of the previous Telnyx mobile number (+353863876186). This is the correct and compliant approach for outbound calls in Ireland.
+- Place the outbound Telnyx call to the on-call vet
+- Send the WhatsApp case details
 
-**2. WhatsApp message failure (first test)**
+This avoids overlapping the inbound AI call with the outbound vet dial.
 
-The first-test failure (`detached Frame` error) was a transient issue with our WhatsApp automation browser session — it tried to send before WhatsApp Web had fully stabilised after a reconnect. We have added:
+**2. Original caller ID via Telnyx outbound**
 
-- Automatic retries when this happens
-- A short wait until WhatsApp reports fully connected before accepting sends
-- An extra retry at escalation level if the first send attempt still fails
+Outbound vet calls now use **caller ID passthrough** by default: the vet's phone should display the **original caller's mobile number** (the number that dialled the clinic).
 
-Your second test completed successfully (call + WhatsApp + vet reply), which confirms the core flow is working.
+This requires **Caller ID Override** enabled on your Telnyx Voice API Application (see our Telnyx portal setup notes). If Telnyx rejects the passthrough number (trunk policy / validation), the system **automatically falls back** to your Irish landline **+353216037774** so the call still completes.
 
-**3. More realistic voice on outbound calls**
+**3. Telnyx trunk retry / failover**
 
-We upgraded the outbound notification voice from basic Telnyx TTS to **Telnyx NaturalHD** (British English). It should sound noticeably more natural on the "check your WhatsApp" call to the vet. If you would like a different tone, we can try other NaturalHD voices or ElevenLabs via Telnyx.
+- If passthrough CLI is rejected at dial time → immediate redial with landline fallback
+- If the vet call ends without answer (busy / no answer) → one automatic redial attempt
+- WhatsApp failover timer (15 min) and backup-vet escalation unchanged for no WhatsApp response
 
-**Next step**
+**Telnyx portal action required**
 
-We will run one more end-to-end test after deployment and confirm the vet call shows **021 603 7774** / **+353216037774**.
+Please enable **Caller ID Override** on your Voice API Application and assign **+353216037774** as the verified fallback number. Without this, passthrough may not work and calls will use the landline only.
 
-Let us know if you would like any further voice adjustments after you hear the new NaturalHD message.
+We will run an end-to-end test after deployment and confirm the vet sees the caller's number when the inbound call ends.
 
 Best regards,
 Theo

@@ -17,6 +17,87 @@ const { normalisePhone } = require('../utils/helpers');
 // Active escalation timers — keyed by case ID
 const escalationTimers = new Map();
 
+// Retell inbound calls currently in progress (defer outbound until call ends)
+const activeRetellCalls = new Set();
+
+function markRetellCallStarted(callId) {
+  if (callId) activeRetellCalls.add(callId);
+}
+
+function markRetellCallEnded(callId) {
+  if (callId) activeRetellCalls.delete(callId);
+}
+
+function isRetellCallActive(callId) {
+  return callId ? activeRetellCalls.has(callId) : false;
+}
+
+/**
+ * Queue escalation until the inbound Retell call ends.
+ * If the call already ended, run escalation immediately.
+ */
+async function queueEscalationAfterInboundCall(caseId, retellCallId) {
+  db.queueCaseEscalation(caseId);
+  db.addAuditLog(caseId, 'escalation_queued', {
+    retellCallId,
+    message: 'Vet notification deferred until inbound Retell call ends',
+  });
+
+  if (!isRetellCallActive(retellCallId)) {
+    logger.info(`Retell call ${retellCallId} already ended — running queued escalation immediately`, { caseId });
+    await releaseQueuedEscalations(retellCallId);
+    return;
+  }
+
+  logger.info(`Escalation queued for case ${caseId} until Retell call ${retellCallId} ends`);
+}
+
+/**
+ * Run all escalations queued during an inbound Retell call.
+ */
+async function releaseQueuedEscalations(retellCallId) {
+  if (!retellCallId) return;
+
+  const queuedCases = db.getQueuedEscalationsByRetellCallId(retellCallId);
+  if (queuedCases.length === 0) return;
+
+  logger.info(`Releasing ${queuedCases.length} queued escalation(s) after Retell call ended`, { retellCallId });
+
+  for (const caseRow of queuedCases) {
+    db.clearCaseEscalationQueue(caseRow.id);
+    db.addAuditLog(caseRow.id, 'escalation_released', { retellCallId });
+    await escalateCase(caseRow.id);
+  }
+}
+
+/**
+ * Redial vet Telnyx notification after trunk no-answer / busy.
+ */
+async function retryVetCallFromWebhook(state) {
+  if (!state?.caseId) return;
+
+  try {
+    const result = await telnyxService.redialVetNotification(state);
+    if (result) {
+      db.addAuditLog(state.caseId, 'vet_call_redial', {
+        vetPhone: state.vetPhone,
+        dialAttempt: (state.dialAttempt || 1) + 1,
+      });
+    } else {
+      db.addAuditLog(state.caseId, 'vet_call_unanswered', {
+        vetPhone: state.vetPhone,
+        message: 'Telnyx redial limit reached; WhatsApp failover continues',
+      });
+    }
+  } catch (err) {
+    logger.error('Failed to redial vet notification call', {
+      caseId: state.caseId,
+      error: err.message,
+    });
+    db.addAuditLog(state.caseId, 'vet_call_redial_failed', { error: err.message });
+  }
+}
+
 /**
  * Start the full escalation workflow for an urgent case.
  * 1. Resolve which clinic this case belongs to
@@ -108,12 +189,25 @@ async function escalateCase(caseId) {
 
   try {
     // Step 1: Make outbound call to vet — "Check your WhatsApp"
+    const callOptions = {
+      callerPhone: updatedCase.caller_phone,
+      callerName: updatedCase.caller_name,
+      clinicDid: clinicDID,
+    };
+
     try {
-      await telnyxService.callVetNotification(vet.phone, vet.name, caseId, clinicName, clinicDID);
+      await telnyxService.callVetNotification(
+        vet.phone,
+        vet.name,
+        caseId,
+        clinicName,
+        callOptions
+      );
       db.addAuditLog(caseId, 'vet_call_initiated', {
         vetName: vet.name,
         vetPhone: vet.phone,
         clinicName,
+        callerPhone: updatedCase.caller_phone,
       });
     } catch (callErr) {
       logger.error(`Outbound call to vet failed, continuing with WhatsApp`, {
@@ -338,6 +432,11 @@ async function handleVetResponse(vetPhone, response) {
 
 module.exports = {
   escalateCase,
+  queueEscalationAfterInboundCall,
+  releaseQueuedEscalations,
+  markRetellCallStarted,
+  markRetellCallEnded,
+  retryVetCallFromWebhook,
   handleVetResponse,
   cancelFailoverTimer,
 };

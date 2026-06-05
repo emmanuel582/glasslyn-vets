@@ -22,7 +22,11 @@ async function testOutbound() {
       targetNumber,
       'Test Doctor',
       'test-case-1234',
-      'Glasslyn Vets Test Clinic'
+      'Glasslyn Vets Test Clinic',
+      {
+        callerPhone: '+353871234567',
+        callerName: 'Test Caller',
+      }
     );
 
     console.log('Outbound call initiated successfully!');

@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const logger = require('../utils/logger');
 const db = require('../database');
+const escalationService = require('../services/escalationService');
 const { normalisePhone } = require('../utils/helpers');
 
 /**
@@ -40,7 +41,9 @@ router.post('/', (req, res) => {
         break;
 
       case 'call_ended':
-        handleCallEnded(call);
+        handleCallEnded(call).catch((err) => {
+          logger.error('Error in call_ended handler', { error: err.message });
+        });
         break;
 
       case 'call_analyzed':
@@ -66,6 +69,10 @@ router.post('/', (req, res) => {
 function handleCallStarted(call) {
   if (!call) return;
 
+  if (call.call_id) {
+    escalationService.markRetellCallStarted(call.call_id);
+  }
+
   logger.info('Call started', {
     callId: call.call_id,
     direction: call.direction,
@@ -86,7 +93,7 @@ function handleCallStarted(call) {
  * Handle call_ended event.
  * Log call completion and transcript summary.
  */
-function handleCallEnded(call) {
+async function handleCallEnded(call) {
   if (!call) return;
 
   logger.info('Call ended', {
@@ -101,6 +108,18 @@ function handleCallEnded(call) {
     disconnectionReason: call.disconnection_reason,
     transcript: call.transcript ? call.transcript.substring(0, 500) : null,
   });
+
+  if (call.call_id) {
+    try {
+      await escalationService.releaseQueuedEscalations(call.call_id);
+    } catch (err) {
+      logger.error('Failed to release queued escalations after call ended', {
+        callId: call.call_id,
+        error: err.message,
+      });
+    }
+    escalationService.markRetellCallEnded(call.call_id);
+  }
 }
 
 /**

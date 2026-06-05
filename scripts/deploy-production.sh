@@ -42,6 +42,30 @@ else
   echo 'TELNYX_VOICE_LANGUAGE=en-GB' >> "$ENV_FILE"
 fi
 
+if grep -q '^TELNYX_CALLER_ID_MODE=' "$ENV_FILE"; then
+  sed -i 's|^TELNYX_CALLER_ID_MODE=.*|TELNYX_CALLER_ID_MODE=passthrough|' "$ENV_FILE"
+else
+  echo 'TELNYX_CALLER_ID_MODE=passthrough' >> "$ENV_FILE"
+fi
+
+if grep -q '^TELNYX_CALLER_ID_FALLBACK=' "$ENV_FILE"; then
+  sed -i 's|^TELNYX_CALLER_ID_FALLBACK=.*|TELNYX_CALLER_ID_FALLBACK=true|' "$ENV_FILE"
+else
+  echo 'TELNYX_CALLER_ID_FALLBACK=true' >> "$ENV_FILE"
+fi
+
+if grep -q '^TELNYX_REDIAL_ON_NO_ANSWER=' "$ENV_FILE"; then
+  sed -i 's|^TELNYX_REDIAL_ON_NO_ANSWER=.*|TELNYX_REDIAL_ON_NO_ANSWER=true|' "$ENV_FILE"
+else
+  echo 'TELNYX_REDIAL_ON_NO_ANSWER=true' >> "$ENV_FILE"
+fi
+
+if grep -q '^TELNYX_DIAL_MAX_ATTEMPTS=' "$ENV_FILE"; then
+  sed -i 's|^TELNYX_DIAL_MAX_ATTEMPTS=.*|TELNYX_DIAL_MAX_ATTEMPTS=2|' "$ENV_FILE"
+else
+  echo 'TELNYX_DIAL_MAX_ATTEMPTS=2' >> "$ENV_FILE"
+fi
+
 echo "Updated .env Telnyx settings:"
 grep '^TELNYX_FROM_NUMBER=' "$ENV_FILE" || true
 grep '^TELNYX_VOICE=' "$ENV_FILE" || true

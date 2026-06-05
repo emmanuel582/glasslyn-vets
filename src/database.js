@@ -200,6 +200,12 @@ function runMigrations() {
     );
   `);
 
+  // Migration: queue outbound vet escalation until inbound Retell call ends
+  if (!columnNames.includes('escalation_queued')) {
+    db.exec('ALTER TABLE cases ADD COLUMN escalation_queued INTEGER DEFAULT 0');
+    logger.info('Migration: Added escalation_queued column to cases table');
+  }
+
   // Migration: Create vet_shifts table
   db.exec(`
     CREATE TABLE IF NOT EXISTS vet_shifts (
@@ -407,7 +413,7 @@ function updateCase(caseId, updates) {
     'caller_name', 'caller_phone', 'caller_whatsapp', 'eircode', 'issue_description',
     'urgency', 'status', 'clinic_id', 'dialled_number',
     'assigned_vet_name', 'assigned_vet_phone',
-    'vet_response', 'vet_eta', 'escalation_level', 'retell_call_id'
+    'vet_response', 'vet_eta', 'escalation_level', 'retell_call_id', 'escalation_queued'
   ];
 
   const setClauses = [];
@@ -429,6 +435,39 @@ function updateCase(caseId, updates) {
     UPDATE cases SET ${setClauses.join(', ')} WHERE id = ?
   `).run(...values);
 
+  return getCaseById(caseId);
+}
+
+/**
+ * Mark a case as queued for escalation after the inbound Retell call ends.
+ */
+function queueCaseEscalation(caseId) {
+  getDb().prepare(`
+    UPDATE cases
+    SET escalation_queued = 1, urgency = 'urgent', updated_at = datetime('now')
+    WHERE id = ?
+  `).run(caseId);
+  return getCaseById(caseId);
+}
+
+/**
+ * Get cases queued for escalation tied to a Retell call session.
+ */
+function getQueuedEscalationsByRetellCallId(retellCallId) {
+  return getDb().prepare(`
+    SELECT * FROM cases
+    WHERE retell_call_id = ? AND escalation_queued = 1
+    ORDER BY created_at ASC
+  `).all(retellCallId);
+}
+
+/**
+ * Clear the escalation queue flag for a case.
+ */
+function clearCaseEscalationQueue(caseId) {
+  getDb().prepare(`
+    UPDATE cases SET escalation_queued = 0, updated_at = datetime('now') WHERE id = ?
+  `).run(caseId);
   return getCaseById(caseId);
 }
 
@@ -657,6 +696,9 @@ module.exports = {
   createCase,
   getCaseById,
   updateCase,
+  queueCaseEscalation,
+  getQueuedEscalationsByRetellCallId,
+  clearCaseEscalationQueue,
   findActiveCaseForVet,
   getActiveCases,
   // Vets

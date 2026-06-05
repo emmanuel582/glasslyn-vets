@@ -217,14 +217,14 @@ async function handleTriggerEscalation(args, callId) {
   // Update case urgency to urgent if not already
   db.updateCase(case_id, { urgency: 'urgent' });
 
-  // Start escalation asynchronously (don't block the call)
-  escalationService.escalateCase(case_id).catch((err) => {
-    logger.error(`Escalation failed for case ${case_id}`, { error: err.message });
+  // Queue escalation until inbound Retell call ends (outbound + WhatsApp)
+  escalationService.queueEscalationAfterInboundCall(case_id, callId).catch((err) => {
+    logger.error(`Failed to queue escalation for case ${case_id}`, { error: err.message });
   });
 
   return {
-    status: 'escalating',
-    message: 'The on-call veterinarian is being contacted now. They will receive a call and a WhatsApp message with your case details.',
+    status: 'escalation_queued',
+    message: 'The on-call veterinarian will be contacted as soon as this call ends. They will receive a phone call showing the caller\'s number where supported, and a WhatsApp message with full case details.',
   };
 }
 
