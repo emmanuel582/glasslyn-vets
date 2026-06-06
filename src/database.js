@@ -451,6 +451,19 @@ function queueCaseEscalation(caseId) {
 }
 
 /**
+ * Get the most recent case created for a Retell call session.
+ */
+function getCaseByRetellCallId(retellCallId) {
+  if (!retellCallId) return null;
+  return getDb().prepare(`
+    SELECT * FROM cases
+    WHERE retell_call_id = ?
+    ORDER BY created_at ASC
+    LIMIT 1
+  `).get(retellCallId);
+}
+
+/**
  * Get cases queued for escalation tied to a Retell call session.
  */
 function getQueuedEscalationsByRetellCallId(retellCallId) {
@@ -695,6 +708,7 @@ module.exports = {
   // Cases
   createCase,
   getCaseById,
+  getCaseByRetellCallId,
   updateCase,
   queueCaseEscalation,
   getQueuedEscalationsByRetellCallId,

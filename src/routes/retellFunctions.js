@@ -150,22 +150,55 @@ function handleSaveCaseDetails(args, callId) {
   if (finalName === 'On File' || finalName === 'OnFile') finalName = 'Unknown';
   if (finalEircode === 'On File' || finalEircode === 'OnFile') finalEircode = 'Unknown';
 
+  const clinicId = isNaN(parsedClinicId) ? 1 : parsedClinicId;
+  const callerPhone = normalisePhone(phone);
+
   logger.info('Saving case details', {
-    callerPhone: normalisePhone(phone),
+    callerPhone,
     whatsappPhone,
     whatsappProvided: !!whatsapp_number,
-    clinicId: parsedClinicId || 1
+    clinicId,
+    retellCallId: callId,
   });
 
+  const existingCase = callId ? db.getCaseByRetellCallId(callId) : null;
+  if (existingCase) {
+    const updatedCase = db.updateCase(existingCase.id, {
+      caller_phone: callerPhone,
+      caller_whatsapp: whatsappPhone,
+      caller_name: finalName,
+      eircode: finalEircode,
+      issue_description: issue_description || null,
+      clinic_id: clinicId,
+    });
+
+    db.addAuditLog(existingCase.id, 'case_details_updated', {
+      callerPhone,
+      callerName: finalName,
+      retellCallId: callId,
+    });
+
+    logger.info('Case already exists for Retell call — updated details', {
+      caseId: existingCase.id,
+      retellCallId: callId,
+    });
+
+    return {
+      case_id: updatedCase.id,
+      status: updatedCase.status,
+      message: `Case ${updatedCase.id} already exists. Details have been updated.`,
+    };
+  }
+
   const newCase = caseService.openCase({
-    callerPhone: normalisePhone(phone),
+    callerPhone,
     callerWhatsapp: whatsappPhone,
     callerName: finalName,
     eircode: finalEircode,
     issueDescription: issue_description || null,
     urgency: 'pending',
     retellCallId: callId,
-    clinicId: isNaN(parsedClinicId) ? 1 : parsedClinicId,
+    clinicId,
   });
 
   return {

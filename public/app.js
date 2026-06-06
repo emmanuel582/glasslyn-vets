@@ -88,7 +88,7 @@ async function fetchCases() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td style="font-family: monospace; letter-spacing: 1px;">${c.id}</td>
-        <td>${formatDate(c.created_at)}</td>
+        <td data-raw-date="${c.created_at}">${formatDate(c.created_at)}</td>
         <td style="font-weight: 500; color: var(--text-main);">${c.clinic_name || 'Glasslyn Vets'}</td>
         <td>${renderUrgency(c.urgency)}</td>
         <td style="text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">${c.status}</td>
@@ -123,12 +123,12 @@ async function fetchLogs() {
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td style="width: 150px; color: var(--text-muted);">${formatDate(l.created_at)}</td>
+        <td style="width: 150px; color: var(--text-muted);" data-raw-date="${l.created_at}">${formatDate(l.created_at)}</td>
         <td style="width: 150px; font-family: monospace;">${l.case_id || '-'}</td>
         <td style="width: 150px;">${l.caller_name || '-'}</td>
         <td style="width: 200px;">
           <span style="background: rgba(0,0,0,0.05); padding: 4px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; color: var(--text-main);">
-            ${l.event_type.replace(/_/g, ' ')}
+            ${formatEventType(l.event_type)}
           </span>
         </td>
         <td style="color: var(--text-muted); font-size: 13px;">${detailsHTML}</td>
@@ -155,8 +155,8 @@ async function fetchCallers() {
         <td style="font-family: monospace;">${c.phone}</td>
         <td>${c.name || '<span style="color: var(--text-muted)">Unknown</span>'}</td>
         <td>${c.eircode || '-'}</td>
-        <td style="color: var(--text-muted);">${formatDate(c.created_at)}</td>
-        <td>${formatDate(c.updated_at)}</td>
+        <td style="color: var(--text-muted);" data-raw-date="${c.created_at}">${formatDate(c.created_at)}</td>
+        <td data-raw-date="${c.updated_at}">${formatDate(c.updated_at)}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -261,7 +261,7 @@ window.renderCalendar = async function() {
       content += `<div style="font-size:9px; font-weight:600; background:rgba(0,102,255,0.1); border:1px solid rgba(0,102,255,0.2); border-radius:4px; padding:2px 4px; margin-top:4px; color:var(--accent); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Level ${s.level_order}: ${s.name}">L${s.level_order}: ${s.name.split(' ')[0]}</div>`;
     });
 
-    const isToday = new Date().toISOString().split('T')[0] === dateStr;
+    const isToday = getTodayInDublin() === dateStr;
     const bg = isToday ? 'rgba(0,102,255,0.05)' : 'rgba(255,255,255,0.4)';
     const border = isToday ? '2px solid var(--accent)' : '1px solid var(--glass-border)';
 
@@ -502,8 +502,8 @@ function sortTable(tableId, colIndex, asc) {
     
     // Date/Time sort (rudimentary detection)
     if (aText.includes('202') && aText.includes(':')) {
-      const d1 = new Date(aText);
-      const d2 = new Date(bText);
+      const d1 = parseDbDate(a.cells[colIndex].dataset.rawDate || aText);
+      const d2 = parseDbDate(b.cells[colIndex].dataset.rawDate || bText);
       if (!isNaN(d1) && !isNaN(d2)) {
         return asc ? d1 - d2 : d2 - d1;
       }
@@ -532,11 +532,40 @@ function reapplySort(tableId) {
 
 
 // ─── UTILITIES ────────────────────────────────────────
-function formatDate(isoStr) {
-  if (!isoStr) return '-';
-  const date = new Date(isoStr);
+const EVENT_LABELS = {
+  telnyx_call_answered: 'Vet answered',
+  telnyx_voicemail_message: 'Voicemail message left',
+  telnyx_call_unanswered: 'No answer',
+  telnyx_call_completed: 'Call completed',
+  vet_call_unanswered: 'No answer',
+};
+
+function formatEventType(eventType) {
+  return EVENT_LABELS[eventType] || eventType.replace(/_/g, ' ');
+}
+
+function parseDbDate(dbStr) {
+  if (!dbStr) return NaN;
+  const iso = dbStr.includes('T') ? dbStr : `${dbStr.trim().replace(' ', 'T')}Z`;
+  return new Date(iso).getTime();
+}
+
+function getTodayInDublin() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin' }).format(new Date());
+}
+
+function formatDate(dbStr) {
+  if (!dbStr) return '-';
+  const iso = dbStr.includes('T') ? dbStr : `${dbStr.trim().replace(' ', 'T')}Z`;
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return dbStr;
   return date.toLocaleString('en-IE', {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+    timeZone: 'Europe/Dublin',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   });
 }
 

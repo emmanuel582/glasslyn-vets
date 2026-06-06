@@ -2,8 +2,9 @@
 // Glasslyn Vets — Telnyx Webhook Handler
 // ============================================
 // Handles outbound vet notification call events:
-// call.answered → speak, call.machine.greeting.ended → speak (voicemail),
-// call.speak.ended → hangup, call.hangup → redial on no-answer
+// call.answered → wait for AMD (if enabled), call.machine.detection.ended → human/machine,
+// call.machine.greeting.ended → speak (voicemail), call.speak.ended → hangup,
+// call.hangup → redial on no-answer
 
 const express = require('express');
 const router = express.Router();
@@ -32,6 +33,7 @@ router.post('/', async (req, res) => {
       from: payload.from,
       to: payload.to,
       hangupCause: payload.hangup_cause,
+      amdResult: payload.result,
     });
 
     const state = telnyxService.decodeClientState(payload.client_state);
@@ -42,6 +44,11 @@ router.post('/', async (req, res) => {
     switch (eventType) {
       case 'call.answered':
         await handleCallAnswered(callControlId, state);
+        break;
+
+      case 'call.machine.detection.ended':
+      case 'call.machine.premium.detection.ended':
+        await handleMachineDetectionEnded(callControlId, state, payload);
         break;
 
       case 'call.machine.greeting.ended':
@@ -70,15 +77,16 @@ router.post('/', async (req, res) => {
 async function handleCallAnswered(callControlId, state) {
   if (!callControlId || !state || state.stage !== telnyxService.VET_NOTIFICATION_STAGE) return;
 
-  try {
-    const deliveredState = { ...state, delivered: true };
-    await telnyxService.speakVetNotification(callControlId, deliveredState);
-    db.addAuditLog(state.caseId, 'telnyx_call_answered', {
+  if (config.telnyx.amd) {
+    logger.info('Telnyx call answered — waiting for AMD before delivery', {
       callControlId,
-      vetName: state.vetName,
-      fromNumber: state.fromNumber,
-      callerIdSource: state.callerIdSource,
+      caseId: state.caseId,
     });
+    return;
+  }
+
+  try {
+    await deliverVetNotification(callControlId, state, 'telnyx_call_answered');
   } catch (err) {
     logger.error('Failed to speak vet notification on call.answered', {
       callControlId,
@@ -88,17 +96,45 @@ async function handleCallAnswered(callControlId, state) {
   }
 }
 
+async function handleMachineDetectionEnded(callControlId, state, payload) {
+  if (!callControlId || !state || state.stage !== telnyxService.VET_NOTIFICATION_STAGE) return;
+  if (state.delivered) return;
+
+  const result = (payload.result || '').toLowerCase();
+
+  logger.info('Telnyx AMD result received', {
+    callControlId,
+    caseId: state.caseId,
+    result,
+  });
+
+  if (result === 'human') {
+    try {
+      await deliverVetNotification(callControlId, state, 'telnyx_call_answered');
+    } catch (err) {
+      logger.error('Failed to speak vet notification after human AMD', {
+        callControlId,
+        caseId: state.caseId,
+        error: err.message,
+      });
+    }
+    return;
+  }
+
+  // machine, not_sure, no_speech, etc. — wait for greeting.ended to leave voicemail message
+  logger.info('Telnyx AMD detected machine or uncertain — waiting for voicemail greeting', {
+    callControlId,
+    caseId: state.caseId,
+    result,
+  });
+}
+
 async function handleVoicemailGreetingEnded(callControlId, state) {
   if (!callControlId || !state || state.stage !== telnyxService.VET_NOTIFICATION_STAGE) return;
+  if (state.delivered) return;
 
   try {
-    const deliveredState = { ...state, delivered: true };
-    await telnyxService.speakVetNotification(callControlId, deliveredState);
-    db.addAuditLog(state.caseId, 'telnyx_voicemail_message', {
-      callControlId,
-      vetName: state.vetName,
-      fromNumber: state.fromNumber,
-    });
+    await deliverVetNotification(callControlId, state, 'telnyx_voicemail_message');
   } catch (err) {
     logger.error('Failed to speak vet notification on voicemail', {
       callControlId,
@@ -106,6 +142,16 @@ async function handleVoicemailGreetingEnded(callControlId, state) {
       error: err.message,
     });
   }
+}
+
+async function deliverVetNotification(callControlId, state, auditEventType) {
+  await telnyxService.speakVetNotification(callControlId, state);
+  db.addAuditLog(state.caseId, auditEventType, {
+    callControlId,
+    vetName: state.vetName,
+    fromNumber: state.fromNumber,
+    callerIdSource: state.callerIdSource,
+  });
 }
 
 async function handleSpeakEnded(callControlId, state) {

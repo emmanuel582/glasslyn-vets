@@ -306,6 +306,7 @@ module.exports = {
   getTelnyxClient,
   callVetNotification,
   redialVetNotification,
+  resolveOutboundCallerId,
   buildVetNotificationMessage,
   encodeClientState,
   decodeClientState,

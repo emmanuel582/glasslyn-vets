@@ -5,7 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test:telnyx": "node scripts/test-telnyx-outbound.js",
+    "test:telnyx:dial": "node scripts/test-telnyx-outbound.js --dial"
   },
   "dependencies": {
     "@wppconnect-team/wppconnect": "^1.31.0",
